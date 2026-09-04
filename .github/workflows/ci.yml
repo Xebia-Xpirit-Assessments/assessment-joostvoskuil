@@ -21,6 +21,9 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Restore .NET Aspire workload
+        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
+
       - name: Restore web solution
         run: dotnet restore eShop.Web.slnf --disable-parallel
 

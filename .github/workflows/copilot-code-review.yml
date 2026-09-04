@@ -26,6 +26,9 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Restore .NET Aspire workload
+        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
+
       - name: Set up Node.js 20
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
