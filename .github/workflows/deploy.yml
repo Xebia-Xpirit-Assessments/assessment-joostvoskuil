@@ -6,15 +6,8 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      target:
-        description: Environment to deploy.
-        required: true
-        type: choice
-        options:
-          - staging
-          - production
       image-tag:
-        description: Full immutable commit SHA. Required for Production; defaults to the dispatched revision for Staging.
+        description: Full immutable commit SHA. Defaults to the dispatched revision.
         required: false
         type: string
 
@@ -23,7 +16,6 @@ permissions:
 
 jobs:
   deploy-staging:
-    if: github.event_name == 'push' || inputs.target == 'staging'
     permissions:
       contents: read
       id-token: write
@@ -39,7 +31,6 @@ jobs:
     secrets: inherit
 
   deploy-production:
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'production' && inputs.image-tag != ''
     permissions:
       contents: read
       id-token: write
@@ -52,5 +43,5 @@ jobs:
       location: swedencentral
       region-code: swe
       environment-code: prd
-      image-tag: ${{ inputs.image-tag }}
+      image-tag: ${{ inputs.image-tag || github.sha }}
     secrets: inherit

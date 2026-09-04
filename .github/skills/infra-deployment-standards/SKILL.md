@@ -34,9 +34,9 @@ Rules:
 - A Staging deployment must not reference, modify, or grant access to Production resources.
 - A Production deployment must not depend on a mutable Staging resource.
 - Use the same reusable Bicep modules for both environments with different parameters.
-- Production must be promoted using an immutable image tag that has already been validated in Staging.
+- Production must be promoted using the same immutable image tag after the Staging deployment succeeds.
 - Production deployments require a protected GitHub Environment and manual approval.
-- Pushes to `main` may deploy Staging automatically; they must not deploy Production automatically without an explicitly approved policy.
+- Pushes to `main` may run the fixed Staging → Production pipeline automatically, but Production must remain blocked by its protected Environment approval.
 
 ## CAF naming
 
@@ -164,7 +164,7 @@ Organize workflows into these layers:
 
 1. CI workflow for pull requests targeting `main`.
 2. Reusable CD workflow accepting explicit environment and deployment inputs.
-3. Orchestration workflow that deploys Staging automatically and promotes Production manually.
+3. Orchestration workflow that deploys Staging and then promotes Production through its protected Environment approval.
 4. Composite actions for repeated build, publish, or validation logic.
 
 Every remote `uses:` reference must:

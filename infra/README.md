@@ -47,7 +47,7 @@ Configure an Entra federated credential for each identity with the GitHub reposi
 
 Grant each identity deployment rights only over its corresponding resource group. The identity also needs `AcrPush` on its environment registry to publish images. Do not use an Azure client secret, publish profile, registry admin account, or subscription-wide Owner role.
 
-Protect the `production` GitHub Environment with required reviewers. Staging is deployed automatically for pushes to `main`; Production requires a manual `Deploy eShop` workflow dispatch with `target=production` and a complete commit SHA that has already been validated in Staging.
+Protect the `production` GitHub Environment with required reviewers. Every push to `main`, or manual dispatch, follows the fixed Staging → Production promotion flow. Production proceeds only after Staging succeeds and its required Environment approval is granted. A manual dispatch may provide a complete immutable commit SHA; otherwise the dispatched revision is used.
 
 ## Nightly cost cleanup
 
@@ -63,7 +63,7 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 1. CI runs for pull requests to `main` and builds the .NET web solution and Bicep templates without Azure credentials.
 2. A push to `main` invokes the reusable CD workflow for Staging.
 3. CD signs in with GitHub OIDC, creates/updates the Staging resource group and ACR, builds SHA-tagged container images, runs Bicep `what-if`, then deploys the Container Apps environment.
-4. An approved operator manually dispatches Production with the same SHA. The reusable workflow uses only the Production Environment’s secrets and resource group.
+4. After Staging succeeds, the protected Production job requests approval and then deploys the same immutable SHA using only the Production Environment’s secrets and resource group.
 
 `bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates all environment resources. This prevents a Staging run from changing Production resources.
 
