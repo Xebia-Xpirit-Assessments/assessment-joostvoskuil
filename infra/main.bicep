@@ -84,15 +84,11 @@ module redis './modules/redis.bicep' = {
   }
 }
 
-resource redisCache 'Microsoft.Cache/redis@2024-11-01' existing = {
-  name: redisName
-}
-
 var rabbitMqConnectionString = 'amqp://eshop:${uriComponent(rabbitMqPassword)}@${rabbitMqName}.${containerAppsEnvironment.outputs.defaultDomain}:5672'
 var catalogConnectionString = 'Host=${postgres.outputs.fullyQualifiedDomainName};Port=5432;Database=catalogdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var identityConnectionString = 'Host=${postgres.outputs.fullyQualifiedDomainName};Port=5432;Database=identitydb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var orderingConnectionString = 'Host=${postgres.outputs.fullyQualifiedDomainName};Port=5432;Database=orderingdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
-var redisConnectionString = '${redis.outputs.hostName}:6380,password=${redisCache.listKeys().primaryKey},ssl=True,abortConnect=False'
+var redisConnectionString = redis.outputs.primaryStackExchangeRedisConnectionString
 var identityUrl = 'https://${identityName}.${containerAppsEnvironment.outputs.defaultDomain}'
 var webAppUrl = 'https://${webName}.${containerAppsEnvironment.outputs.defaultDomain}'
 

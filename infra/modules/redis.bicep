@@ -2,18 +2,25 @@ param location string
 param name string
 param tags object = {}
 
-module cache 'br/public:avm/res/cache/redis:0.18.0' = {
+module cache 'br/public:avm/res/cache/redis-enterprise:0.5.1' = {
   params: {
     name: name
     location: location
     tags: tags
-    capacity: 0
-    enableNonSslPort: false
+    database: {
+      accessKeysAuthentication: 'Enabled'
+      clientProtocol: 'Encrypted'
+      clusteringPolicy: 'NoCluster'
+    }
     enableTelemetry: false
+    highAvailability: 'Disabled'
     minimumTlsVersion: '1.2'
     publicNetworkAccess: 'Enabled'
-    skuName: 'Basic'
+    skuName: 'Balanced_B0'
   }
 }
 
 output hostName string = cache.outputs.hostName
+
+@secure()
+output primaryStackExchangeRedisConnectionString string = cache.outputs.primaryStackExchangeRedisConnectionString!

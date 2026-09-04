@@ -21,7 +21,7 @@ Each environment creates its own low-cost resources:
 - Container Apps Consumption environment (`cae`)
 - Log Analytics workspace (`log`)
 - PostgreSQL Flexible Server, Burstable `Standard_B1ms`, no high availability (`psql`)
-- Azure Cache for Redis Basic C0 (`redis`)
+- Azure Managed Redis Balanced B0 (`redis`)
 - Internal RabbitMQ Container App (demo-only)
 - Public WebApp and Identity API Container Apps
 - Internal Basket, Catalog, and Ordering API Container Apps
@@ -76,7 +76,7 @@ The local modules in `infra/modules/` compose these AVM resource modules:
 - `avm/res/app/managed-environment:0.16.0`
 - `avm/res/app/container-app:0.23.0`
 - `avm/res/db-for-postgre-sql/flexible-server:0.10.0`
-- `avm/res/cache/redis:0.18.0`
+- `avm/res/cache/redis-enterprise:0.5.1`
 
 Versions are deliberately pinned for repeatable deployments. Update a module only after reviewing its release notes, inputs, outputs, and `what-if` impact. The Container App wrapper retains its local managed-identity and `AcrPull` role-assignment resources because the identity is application-specific and the registry is created in the separate subscription-scoped bootstrap deployment.
 
