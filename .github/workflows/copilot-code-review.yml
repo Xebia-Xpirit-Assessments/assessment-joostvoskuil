@@ -1,10 +1,6 @@
-name: Copilot Code Review Setup
+name: _Copilot Code Review Setup
 
 on:
-  workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-code-review.yml
   pull_request:
     paths:
       - .github/workflows/copilot-code-review.yml

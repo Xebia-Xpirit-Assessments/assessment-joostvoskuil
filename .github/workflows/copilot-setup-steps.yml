@@ -1,11 +1,7 @@
-name: Copilot Setup Steps
+name: _Copilot Setup Steps
 
 # Validate changes to this setup file and allow manual runs from the Actions tab.
 on:
-  workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
   pull_request:
     paths:
       - .github/workflows/copilot-setup-steps.yml

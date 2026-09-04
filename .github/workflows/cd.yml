@@ -1,4 +1,4 @@
-name: Reusable Azure deployment
+name: _Deploy to Environment
 
 on:
   workflow_call:
