@@ -6,7 +6,12 @@ updates:
       - "/tests/**"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 999
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
       # Aspire 8 is tied to the .NET 8 toolchain; upgrade the whole family deliberately.
       - dependency-name: "Aspire.*"
@@ -20,10 +25,20 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 999
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 999
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
