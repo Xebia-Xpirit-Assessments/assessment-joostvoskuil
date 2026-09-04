@@ -24,6 +24,9 @@ permissions:
 jobs:
   deploy-staging:
     if: github.event_name == 'push' || inputs.target == 'staging'
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/cd.yml
     with:
       environment: staging
@@ -37,6 +40,9 @@ jobs:
 
   deploy-production:
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'production' && inputs.image-tag != ''
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/cd.yml
     with:
       environment: production

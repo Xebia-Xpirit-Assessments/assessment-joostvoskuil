@@ -1,0 +1,23 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Review dependency licenses and vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check dependency licenses and vulnerabilities
+        uses: actions/dependency-review-action@aa60746a920d63ce55376f67d381e15edd3a714d # v4
+        with:
+          config-file: ./.github/dependency-review-config.yml
+          fail-on-severity: moderate

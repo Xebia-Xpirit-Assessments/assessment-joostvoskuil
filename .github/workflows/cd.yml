@@ -31,18 +31,6 @@ on:
         description: Immutable full Git commit SHA to build and deploy.
         required: true
         type: string
-    secrets:
-      AZURE_CLIENT_ID:
-        required: true
-      AZURE_TENANT_ID:
-        required: true
-      AZURE_SUBSCRIPTION_ID:
-        required: true
-      POSTGRES_ADMINISTRATOR_PASSWORD:
-        required: true
-      RABBITMQ_PASSWORD:
-        required: true
-
 permissions:
   contents: read
   id-token: write
