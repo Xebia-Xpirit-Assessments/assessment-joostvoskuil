@@ -84,7 +84,7 @@ module redis './modules/redis.bicep' = {
   }
 }
 
-var rabbitMqConnectionString = 'amqp://eshop:${uriComponent(rabbitMqPassword)}@${rabbitMqName}.${containerAppsEnvironment.outputs.defaultDomain}:5672'
+var rabbitMqConnectionString = 'amqp://eshop:${uriComponent(rabbitMqPassword)}@${rabbitMqName}.internal.${containerAppsEnvironment.outputs.defaultDomain}:5672'
 var catalogConnectionString = 'Host=${postgres.outputs.fullyQualifiedDomainName};Port=5432;Database=catalogdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var identityConnectionString = 'Host=${postgres.outputs.fullyQualifiedDomainName};Port=5432;Database=identitydb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var orderingConnectionString = 'Host=${postgres.outputs.fullyQualifiedDomainName};Port=5432;Database=orderingdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
@@ -280,15 +280,15 @@ module web './modules/container-app.bicep' = {
       }
       {
         name: 'services__basket-api__http__0'
-        value: 'http://${basketName}.${containerAppsEnvironment.outputs.defaultDomain}'
+        value: 'http://${basketName}'
       }
       {
         name: 'services__catalog-api__http__0'
-        value: 'http://${catalogName}.${containerAppsEnvironment.outputs.defaultDomain}'
+        value: 'http://${catalogName}'
       }
       {
         name: 'services__ordering-api__http__0'
-        value: 'http://${orderingName}.${containerAppsEnvironment.outputs.defaultDomain}'
+        value: 'http://${orderingName}'
       }
     ]
     secrets: [
