@@ -58,7 +58,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
     strategy:
       fail-fast: false
       matrix:
@@ -99,7 +98,7 @@ jobs:
 
       - name: Upload unit-test results
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unit-test-results-${{ matrix.name }}
           path: test-results
@@ -115,12 +114,38 @@ jobs:
           fail-on-empty: false
           report-title: Unit tests (${{ matrix.name }})
 
-      - name: Upload unit-test coverage
+      - name: Upload coverage artifact
         if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-code-coverage@1c15be36fc3733ba839b1dd643bd9556e4426dc1 # v1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          file: coverage/${{ matrix.name }}.cobertura.xml
-          language: 'C#'
+          name: coverage-report-unit-${{ matrix.name }}
+          path: coverage/${{ matrix.name }}.cobertura.xml
+
+  upload-coverage-unit:
+    name: Upload unit-test coverage (${{ matrix.name }})
+    needs: unit-tests
+    if: ${{ !cancelled() && needs.unit-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Basket
+          - name: Ordering
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: coverage-report-unit-${{ matrix.name }}
+
+      - name: Upload unit-test coverage
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: ${{ matrix.name }}.cobertura.xml
+          language: C#
           label: code-coverage/unit-${{ matrix.name }}
 
   functional-tests:
@@ -129,7 +154,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
     strategy:
       fail-fast: false
       matrix:
@@ -173,7 +197,7 @@ jobs:
 
       - name: Upload functional-test results
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: functional-test-results-${{ matrix.name }}
           path: test-results
@@ -189,10 +213,36 @@ jobs:
           fail-on-empty: false
           report-title: Functional tests (${{ matrix.name }})
 
-      - name: Upload functional-test coverage
+      - name: Upload coverage artifact
         if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-code-coverage@1c15be36fc3733ba839b1dd643bd9556e4426dc1 # v1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          file: coverage/${{ matrix.name }}.cobertura.xml
-          language: 'C#'
+          name: coverage-report-functional-${{ matrix.name }}
+          path: coverage/${{ matrix.name }}.cobertura.xml
+
+  upload-coverage-functional:
+    name: Upload functional-test coverage (${{ matrix.name }})
+    needs: functional-tests
+    if: ${{ !cancelled() && needs.functional-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Catalog
+          - name: Ordering
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: coverage-report-functional-${{ matrix.name }}
+
+      - name: Upload functional-test coverage
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: ${{ matrix.name }}.cobertura.xml
+          language: C#
           label: code-coverage/functional-${{ matrix.name }}
