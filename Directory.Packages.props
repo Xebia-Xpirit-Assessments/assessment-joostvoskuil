@@ -2,14 +2,14 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <AspnetVersion>8.0.6</AspnetVersion>
+    <AspnetVersion>8.0.30</AspnetVersion>
     <MicrosoftExtensionsVersion>8.5.0</MicrosoftExtensionsVersion>
     <EfVersion>8.0.6</EfVersion>
-    <AspireVersion>8.0.1</AspireVersion>
+    <AspireVersion>8.0.2</AspireVersion>
     <AspireUnstablePackagesVersion>8.0.0-preview.8.24258.2</AspireUnstablePackagesVersion>
     <GrpcVersion>2.63.0</GrpcVersion>
-    <DuendeVersion>7.0.5</DuendeVersion>
-    <ApiVersioningVersion>8.1.0</ApiVersioningVersion>
+    <DuendeVersion>7.0.8</DuendeVersion>
+    <ApiVersioningVersion>8.1.1</ApiVersioningVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- Version together with Aspire -->
@@ -23,6 +23,7 @@
     <PackageVersion Include="Aspire.RabbitMQ.Client" Version="$(AspireVersion)" />
     <PackageVersion Include="Aspire.StackExchange.Redis" Version="$(AspireVersion)" />
     <PackageVersion Include="Aspire.Azure.AI.OpenAI" Version="$(AspireUnstablePackagesVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="$(AspireVersion)" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery.Yarp" Version="$(AspireVersion)" />
     <!-- Version together with ASP.NET -->
@@ -43,16 +44,16 @@
     <PackageVersion Include="MSTest.TestAdapter" Version="3.4.3" />
     <PackageVersion Include="MSTest.TestFramework" Version="3.4.3" />
     <!-- Version together with EF -->
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="$(EfVersion)" />
     <PackageVersion Include="NSubstitute" Version="5.1.0" />
     <PackageVersion Include="NSubstitute.Analyzers.CSharp" Version="1.0.17" />
-    <PackageVersion Include="Pgvector" Version="0.2.0" />
-    <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.2.0" />
+    <PackageVersion Include="Pgvector" Version="0.3.1" />
+    <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.2.2" />
     <!-- Version together with runtime -->
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <!-- Xabaril packages -->
     <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
     <!-- AI -->
@@ -73,7 +74,7 @@
     <PackageVersion Include="Duende.IdentityServer.Storage" Version="$(DuendeVersion)" />
     <!-- VS Test -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <!-- Scaffolding -->
     <PackageVersion Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.0-rc.1.23461.3" />
     <!-- Grpc -->
@@ -82,11 +83,11 @@
     <PackageVersion Include="Grpc.Tools" Version="$(GrpcVersion)" PrivateAssets="All" />
     <!-- Miscellaneous -->
     <PackageVersion Include="Automapper" Version="13.0.1" />
-    <PackageVersion Include="Dapper" Version="2.1.35" />
-    <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageVersion Include="Dapper" Version="2.1.79" />
+    <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageVersion Include="MediatR" Version="12.3.0" />
     <PackageVersion Include="Microsoft.Web.LibraryManager.Build" Version="2.1.175" />
-    <PackageVersion Include="Polly.Core" Version="8.4.0" />
+    <PackageVersion Include="Polly.Core" Version="8.4.2" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <PackageVersion Include="System.Reflection.TypeExtensions" Version="4.7.0" />
     <PackageVersion Include="xunit" Version="2.8.1" />
