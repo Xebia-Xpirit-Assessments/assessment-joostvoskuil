@@ -21,8 +21,8 @@ on:
       - '.dockerignore'
       - 'src/**/Dockerfile'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/ci-service.yml'
       - '.github/actions/**'
-      - '.github/scripts/**'
   pull_request:
     branches:
       - main
@@ -43,15 +43,15 @@ on:
       - '.dockerignore'
       - 'src/**/Dockerfile'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/ci-service.yml'
       - '.github/actions/**'
-      - '.github/scripts/**'
 
 permissions:
   contents: read
 
 jobs:
   infrastructure:
-    name: Validate Bicep and Docker contexts
+    name: Validate Bicep templates
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -63,248 +63,78 @@ jobs:
           az bicep build --file infra/main.bicep --stdout > /dev/null
           az bicep build --file infra/application.bicep --stdout > /dev/null
 
-      - name: Validate Docker build contexts
-        run: |
-          test -f .dockerignore
-          for dockerfile in src/{WebApp,Identity.API,Basket.API,Catalog.API,Ordering.API}/Dockerfile; do
-            test -f "$dockerfile"
-          done
-
-  build:
-    name: Build web solution
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore .NET Aspire workload
-        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
-
-      - name: Restore web solution
-        run: dotnet restore eShop.Web.slnf
-
-      - name: Build web solution
-        run: dotnet build eShop.Web.slnf --configuration Release --no-restore
-
-  unit-tests:
-    name: Unit tests (${{ matrix.name }})
-    runs-on: ubuntu-latest
+  ci-webapp:
+    name: CI (webapp)
     permissions:
       contents: read
       checks: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Basket
-            project: tests/Basket.UnitTests/Basket.UnitTests.csproj
-          - name: Ordering
-            project: tests/Ordering.UnitTests/Ordering.UnitTests.csproj
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Run unit tests
-        run: >-
-          dotnet test "${{ matrix.project }}"
-          --configuration Release
-          --collect:"XPlat Code Coverage"
-          --logger "trx;LogFileName=${{ matrix.name }}.trx"
-          --results-directory test-results
-
-      - name: Prepare Cobertura coverage report
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p coverage
-          coverage_file=$(find test-results -name coverage.cobertura.xml -print -quit || true)
-          if [[ -n "$coverage_file" ]]; then
-            cp "$coverage_file" "coverage/${{ matrix.name }}.cobertura.xml"
-          else
-            echo "No Cobertura coverage report was generated."
-          fi
-
-      - name: Upload unit-test results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unit-test-results-${{ matrix.name }}
-          path: test-results
-          if-no-files-found: ignore
-
-      - name: Publish unit-test report
-        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        with:
-          name: Unit tests (${{ matrix.name }})
-          path: test-results/*.trx
-          reporter: dotnet-trx
-          fail-on-empty: false
-          report-title: Unit tests (${{ matrix.name }})
-
-      - name: Upload coverage artifact
-        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: coverage-report-unit-${{ matrix.name }}
-          path: coverage/${{ matrix.name }}.cobertura.xml
-
-  upload-coverage-unit:
-    name: Upload unit-test coverage (${{ matrix.name }})
-    needs: unit-tests
-    if: ${{ !cancelled() && needs.unit-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
       code-quality: write
       pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Basket
-          - name: Ordering
-    steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: coverage-report-unit-${{ matrix.name }}
+    uses: ./.github/workflows/ci-service.yml
+    with:
+      service: webapp
 
-      - name: Upload unit-test coverage
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
-        with:
-          file: ${{ matrix.name }}.cobertura.xml
-          language: C#
-          label: code-coverage/unit-${{ matrix.name }}
-
-  functional-tests:
-    name: Functional tests (${{ matrix.name }})
-    runs-on: ubuntu-latest
+  ci-identity-api:
+    name: CI (identity-api)
     permissions:
       contents: read
       checks: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Catalog
-            project: tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj
-          - name: Ordering
-            project: tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore .NET Aspire workload
-        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
-
-      - name: Run functional tests
-        run: >-
-          dotnet test "${{ matrix.project }}"
-          --configuration Release
-          --collect:"XPlat Code Coverage"
-          --logger "trx;LogFileName=${{ matrix.name }}.trx"
-          --results-directory test-results
-
-      - name: Prepare Cobertura coverage report
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p coverage
-          coverage_file=$(find test-results -name coverage.cobertura.xml -print -quit || true)
-          if [[ -n "$coverage_file" ]]; then
-            cp "$coverage_file" "coverage/${{ matrix.name }}.cobertura.xml"
-          else
-            echo "No Cobertura coverage report was generated."
-          fi
-
-      - name: Upload functional-test results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: functional-test-results-${{ matrix.name }}
-          path: test-results
-          if-no-files-found: ignore
-
-      - name: Publish functional-test report
-        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        with:
-          name: Functional tests (${{ matrix.name }})
-          path: test-results/*.trx
-          reporter: dotnet-trx
-          fail-on-empty: false
-          report-title: Functional tests (${{ matrix.name }})
-
-      - name: Upload coverage artifact
-        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: coverage-report-functional-${{ matrix.name }}
-          path: coverage/${{ matrix.name }}.cobertura.xml
-
-  upload-coverage-functional:
-    name: Upload functional-test coverage (${{ matrix.name }})
-    needs: functional-tests
-    if: ${{ !cancelled() && needs.functional-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
       code-quality: write
       pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Catalog
-          - name: Ordering
-    steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: coverage-report-functional-${{ matrix.name }}
+    uses: ./.github/workflows/ci-service.yml
+    with:
+      service: identity-api
 
-      - name: Upload functional-test coverage
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
-        with:
-          file: ${{ matrix.name }}.cobertura.xml
-          language: C#
-          label: code-coverage/functional-${{ matrix.name }}
+  ci-basket-api:
+    name: CI (basket-api)
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/ci-service.yml
+    with:
+      service: basket-api
+
+  ci-catalog-api:
+    name: CI (catalog-api)
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/ci-service.yml
+    with:
+      service: catalog-api
+
+  ci-ordering-api:
+    name: CI (ordering-api)
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/ci-service.yml
+    with:
+      service: ordering-api
 
   required:
     name: Required
     needs:
       - infrastructure
-      - build
-      - unit-tests
-      - upload-coverage-unit
-      - functional-tests
-      - upload-coverage-functional
-    if: ${{ always() && needs.infrastructure.result != 'failure' && needs.infrastructure.result != 'cancelled' && needs.build.result != 'failure' && needs.build.result != 'cancelled' && needs.unit-tests.result != 'failure' && needs.unit-tests.result != 'cancelled' && needs.upload-coverage-unit.result != 'failure' && needs.upload-coverage-unit.result != 'cancelled' && needs.functional-tests.result != 'failure' && needs.functional-tests.result != 'cancelled' && needs.upload-coverage-functional.result != 'failure' && needs.upload-coverage-functional.result != 'cancelled' }}
+      - ci-webapp
+      - ci-identity-api
+      - ci-basket-api
+      - ci-catalog-api
+      - ci-ordering-api
+    if: ${{ always() && needs.infrastructure.result != 'failure' && needs.infrastructure.result != 'cancelled' && needs.ci-webapp.result != 'failure' && needs.ci-webapp.result != 'cancelled' && needs.ci-identity-api.result != 'failure' && needs.ci-identity-api.result != 'cancelled' && needs.ci-basket-api.result != 'failure' && needs.ci-basket-api.result != 'cancelled' && needs.ci-catalog-api.result != 'failure' && needs.ci-catalog-api.result != 'cancelled' && needs.ci-ordering-api.result != 'failure' && needs.ci-ordering-api.result != 'cancelled' }}
     runs-on: ubuntu-latest
     steps:
       - name: Confirm required CI jobs completed
         run: |
           echo "Infrastructure: ${{ needs.infrastructure.result }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "Unit tests: ${{ needs.unit-tests.result }}"
-          echo "Unit coverage: ${{ needs.upload-coverage-unit.result }}"
-          echo "Functional tests: ${{ needs.functional-tests.result }}"
-          echo "Functional coverage: ${{ needs.upload-coverage-functional.result }}"
+          echo "WebApp: ${{ needs.ci-webapp.result }}"
+          echo "Identity API: ${{ needs.ci-identity-api.result }}"
+          echo "Basket API: ${{ needs.ci-basket-api.result }}"
+          echo "Catalog API: ${{ needs.ci-catalog-api.result }}"
+          echo "Ordering API: ${{ needs.ci-ordering-api.result }}"

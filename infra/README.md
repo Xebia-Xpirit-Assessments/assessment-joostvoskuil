@@ -62,13 +62,15 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 
 ## Deployment flow
 
-1. CI runs for pull requests to `main` and builds the .NET web solution and Bicep templates without Azure credentials.
-2. A relevant push to `main`, or an explicit manual dispatch, selects shared infrastructure and only the affected application services. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
-3. `deploy-infrastructure.yml` owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. `deploy-service.yml` owns one selected application Container App, its managed identity, and its ACR pull role assignment.
-4. Selected Staging services build and deploy independently in a matrix of up to five parallel jobs. Every service uses the full commit SHA as its image tag and uses incremental Bicep deployment, so deploying one service cannot delete or reset its siblings.
-5. The complete authenticated Playwright suite runs against the deployed Staging WebApp after every staging run. Its success is a hard prerequisite for Production. The protected Production Environment then rebuilds the same SHA into the Production registry and promotes selected services in parallel after approval.
+Shared infrastructure and each application service deploy through independent workflows, every one with its own trigger and its own Staging → Production promotion.
 
-Manual dispatch supports `all`, `infrastructure`, or one of `webapp`, `identity-api`, `basket-api`, `catalog-api`, and `ordering-api`. Infrastructure-only and service-only runs assume the corresponding existing application/shared resources are already present; use `all` after a nightly purge or for first provisioning.
+1. `ci.yml` runs for pull requests (and pushes) to `main`. It validates Bicep, then fans out to the reusable `ci-service.yml` template once per service (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) to build and test only that service's project and its mapped test projects.
+2. `infra.yml` triggers on pushes to `infra/bootstrap.bicep`, `infra/main.bicep`, or `infra/modules/**` (or manual dispatch) and calls the reusable `deploy-infrastructure.yml`, which owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.
+3. Each service has its own top-level pipeline — `deploy-webapp.yml`, `deploy-identity-api.yml`, `deploy-basket-api.yml`, `deploy-catalog-api.yml`, `deploy-ordering-api.yml` — triggered only by pushes to that service's own source, its known shared dependencies, `infra/application.bicep`, or the shared reusable templates. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
+4. Each per-service pipeline runs `ci-service.yml` (build + test gate), then calls the reusable `deploy-service.yml` for Staging, then the reusable `e2e-gate.yml` (the same authenticated Playwright suite against the deployed Staging WebApp), then `deploy-service.yml` again for Production. Every service uses the full commit SHA as its image tag and uses incremental Bicep deployment, so deploying one service cannot delete or reset its siblings.
+5. The shared E2E gate is a hard prerequisite for that pipeline's Production promotion. Because every service's pipeline calls it independently, concurrent pushes to different services each re-verify Staging before promoting. The protected Production Environment then rebuilds the same SHA into the Production registry.
+
+Each `deploy-<service>.yml` also supports manual dispatch for that one service; there is no single "deploy all services" action. `infra.yml` manual dispatch always redeploys Staging then Production shared infrastructure. After a nightly purge or for first provisioning, run `infra.yml` first, then dispatch each of the five `deploy-<service>.yml` workflows.
 
 `bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates shared resources only. `application.bicep` is resource-group-scoped and deploys exactly one allow-listed application service. This prevents a Staging run from changing Production resources and prevents a service update from owning unrelated revisions.
 
@@ -95,7 +97,7 @@ az bicep build --file infra/main.bicep
 az bicep build --file infra/application.bicep
 ```
 
-The workflow runs `az deployment group what-if` before applying the environment deployment. Never provide deployment secrets through checked-in Bicep parameter files.
+`deploy-service.yml` runs `az deployment group what-if` before applying the selected application deployment. Never provide deployment secrets through checked-in Bicep parameter files.
 
 ## Demo limitations
 

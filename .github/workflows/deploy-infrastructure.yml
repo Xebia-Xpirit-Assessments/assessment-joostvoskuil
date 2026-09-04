@@ -58,18 +58,6 @@ jobs:
               containerRegistryName="${{ inputs.container-registry }}" \
               tags='{"application":"eshop","environment":"${{ inputs.environment-code }}","managedBy":"github-actions"}'
 
-      - name: Preview shared infrastructure
-        shell: bash
-        run: |
-          az deployment group what-if \
-            --resource-group "${{ inputs.resource-group }}" \
-            --name "shared-${{ inputs.environment }}-${{ github.run_id }}" \
-            --template-file infra/main.bicep \
-            --parameters location="${{ inputs.location }}" environment="${{ inputs.environment-code }}" \
-              regionCode="${{ inputs.region-code }}" containerRegistryName="${{ inputs.container-registry }}" \
-              postgresAdministratorPassword="${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}" \
-              rabbitMqPassword="${{ secrets.RABBITMQ_PASSWORD }}"
-
       - name: Deploy shared infrastructure
         shell: bash
         run: |
