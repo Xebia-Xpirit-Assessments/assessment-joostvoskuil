@@ -11,9 +11,8 @@ updates:
       - ".NET"
       - "dependencies"
     groups:
-      minor-and-patch:
+      patch:
         update-types:
-          - "minor"
           - "patch"
     ignore:
       # Aspire 8 is tied to the .NET 8 toolchain; upgrade the whole family deliberately.
@@ -33,9 +32,8 @@ updates:
       - "NPM"
       - "dependencies"
     groups:
-      minor-and-patch:
+      patch:
         update-types:
-          - "minor"
           - "patch"
 
   - package-ecosystem: "github-actions"
@@ -47,7 +45,6 @@ updates:
       - "GitHubActions"
       - "dependencies"
     groups:
-      minor-and-patch:
+      patch:
         update-types:
-          - "minor"
           - "patch"
