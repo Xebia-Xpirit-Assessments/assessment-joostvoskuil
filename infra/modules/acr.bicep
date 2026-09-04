@@ -2,33 +2,24 @@ param location string
 param name string
 param tags object = {}
 
-resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
-  name: name
-  location: location
-  tags: tags
-  sku: {
-    name: 'Basic'
-  }
-  properties: {
-    adminUserEnabled: false
-    publicNetworkAccess: 'Enabled'
+module registry 'br/public:avm/res/container-registry/registry:0.13.0' = {
+  params: {
+    name: name
+    location: location
+    tags: tags
+    acrAdminUserEnabled: false
+    acrSku: 'Standard'
+    enableTelemetry: false
     networkRuleBypassOptions: 'AzureServices'
-    policies: {
-      quarantinePolicy: {
-        status: 'disabled'
-      }
-      retentionPolicy: {
-        days: 7
-        status: 'enabled'
-      }
-      trustPolicy: {
-        status: 'disabled'
-        type: 'Notary'
-      }
-    }
+    networkRuleSetDefaultAction: 'Allow'
+    publicNetworkAccess: 'Enabled'
+    quarantinePolicyStatus: 'disabled'
+    retentionPolicyDays: 7
+    retentionPolicyStatus: 'enabled'
+    trustPolicyStatus: 'disabled'
   }
 }
 
-output id string = registry.id
-output name string = registry.name
-output loginServer string = registry.properties.loginServer
+output id string = registry.outputs.resourceId
+output name string = registry.outputs.name
+output loginServer string = registry.outputs.loginServer

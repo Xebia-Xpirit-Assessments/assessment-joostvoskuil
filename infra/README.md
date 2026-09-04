@@ -1,6 +1,6 @@
 # eShop Azure deployment
 
-This folder deploys the minimal eShop shopping slice with **Bicep** and **GitHub Actions**. It intentionally does not use `azd` or Azure DevOps.
+This folder deploys the minimal eShop shopping slice with **Bicep** and **GitHub Actions**. It intentionally does not use `azd` or Azure DevOps. Resource modules delegate to version-pinned [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) from the public Bicep registry; the local wrappers preserve this deployment's CAF names, low-cost SKUs, and application configuration contract.
 
 ## Environments and CAF names
 
@@ -8,10 +8,10 @@ Staging and Production use the same Azure subscription but are isolated in disti
 
 | Environment | CAF code | Resource group | Container registry |
 | --- | --- | --- | --- |
-| Staging | `stg` | `rg-eshop-stg-weu-001` | `acreshopstgweu001` |
-| Production | `prd` | `rg-eshop-prd-weu-001` | `acreshopprdweu001` |
+| Staging | `stg` | `rg-eshop-stg-swe-001` | `acreshopstgswe001` |
+| Production | `prd` | `rg-eshop-prd-swe-001` | `acreshopprdswe001` |
 
-Names follow the Azure CAF pattern `<resource-abbreviation>-<workload>-<environment>-<region>-<instance>`. Examples include `cae-eshop-stg-weu-001` for the Container Apps environment and `ca-eshop-web-prd-weu-001` for the Production web app. Azure Container Registry names use the same components without separators because ACR permits alphanumeric characters only; registry names must also be globally unique.
+Deployments use the Sweden Central Azure region (`swedencentral`) and the CAF region code `swe`. Names follow the Azure CAF pattern `<resource-abbreviation>-<workload>-<environment>-<region>-<instance>`. Examples include `cae-eshop-stg-swe-001` for the Container Apps environment and `ca-eshop-web-prd-swe-001` for the Production web app. Azure Container Registry names use the same components without separators because ACR permits alphanumeric characters only; registry names must also be globally unique.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Each environment creates its own low-cost resources:
 - Container Apps Consumption environment (`cae`)
 - Log Analytics workspace (`log`)
 - PostgreSQL Flexible Server, Burstable `Standard_B1ms`, no high availability (`psql`)
-- Azure Cache for Redis Basic C0 (`redis`)
+- Azure Managed Redis Balanced B0 (`redis`)
 - Internal RabbitMQ Container App (demo-only)
 - Public WebApp and Identity API Container Apps
 - Internal Basket, Catalog, and Ordering API Container Apps
@@ -37,6 +37,8 @@ Create two GitHub Environments named exactly `staging` and `production`. Store t
 - `AZURE_SUBSCRIPTION_ID`
 - `POSTGRES_ADMINISTRATOR_PASSWORD`
 - `RABBITMQ_PASSWORD`
+- `E2E_USERNAME` (Staging only)
+- `E2E_PASSWORD` (Staging only)
 
 The three `AZURE_*` values are intentionally Environment secrets, even though both environments use the same subscription ID. Use separate Entra application registrations or managed identities for Staging and Production so each can receive narrowly-scoped permissions.
 
@@ -47,25 +49,41 @@ Configure an Entra federated credential for each identity with the GitHub reposi
 
 Grant each identity deployment rights only over its corresponding resource group. The identity also needs `AcrPush` on its environment registry to publish images. Do not use an Azure client secret, publish profile, registry admin account, or subscription-wide Owner role.
 
-Protect the `production` GitHub Environment with required reviewers. Staging is deployed automatically for pushes to `main`; Production requires a manual `Deploy eShop` workflow dispatch with `target=production` and a complete commit SHA that has already been validated in Staging.
+Protect the `production` GitHub Environment with required reviewers. Every push to `main`, or manual dispatch, follows the fixed Staging → Production promotion flow. Production proceeds only after Staging succeeds and its required Environment approval is granted. Both stages use the workflow revision’s immutable commit SHA.
 
 ## Nightly cost cleanup
 
 `.github/workflows/purge-test-environments.yml` deletes both test resource groups every night at 02:00 UTC:
 
-- `rg-eshop-stg-weu-001`
-- `rg-eshop-prd-weu-001`
+- `rg-eshop-stg-swe-001`
+- `rg-eshop-prd-swe-001`
 
 The workflow uses the `staging` and `production` GitHub Environments independently, so each Azure identity needs delete permission only on its own resource group. It uses OIDC and waits for each deletion to finish. The workflow can also be started manually from the Actions tab. This is intentionally destructive and is appropriate only because these Azure environments are test setup; do not reuse it for real production workloads. Re-running the deployment workflow recreates the required resources.
 
 ## Deployment flow
 
 1. CI runs for pull requests to `main` and builds the .NET web solution and Bicep templates without Azure credentials.
-2. A push to `main` invokes the reusable CD workflow for Staging.
-3. CD signs in with GitHub OIDC, creates/updates the Staging resource group and ACR, builds SHA-tagged container images, runs Bicep `what-if`, then deploys the Container Apps environment.
-4. An approved operator manually dispatches Production with the same SHA. The reusable workflow uses only the Production Environment’s secrets and resource group.
+2. A relevant push to `main`, or an explicit manual dispatch, selects shared infrastructure and only the affected application services. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
+3. `deploy-infrastructure.yml` owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. `deploy-service.yml` owns one selected application Container App, its managed identity, and its ACR pull role assignment.
+4. Selected Staging services build and deploy independently in a matrix of up to five parallel jobs. Every service uses the full commit SHA as its image tag and uses incremental Bicep deployment, so deploying one service cannot delete or reset its siblings.
+5. The complete authenticated Playwright suite runs against the deployed Staging WebApp after every staging run. Its success is a hard prerequisite for Production. The protected Production Environment then rebuilds the same SHA into the Production registry and promotes selected services in parallel after approval.
 
-`bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates all environment resources. This prevents a Staging run from changing Production resources.
+Manual dispatch supports `all`, `infrastructure`, or one of `webapp`, `identity-api`, `basket-api`, `catalog-api`, and `ordering-api`. Infrastructure-only and service-only runs assume the corresponding existing application/shared resources are already present; use `all` after a nightly purge or for first provisioning.
+
+`bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates shared resources only. `application.bicep` is resource-group-scoped and deploys exactly one allow-listed application service. This prevents a Staging run from changing Production resources and prevents a service update from owning unrelated revisions.
+
+## Azure Verified Modules
+
+The local modules in `infra/modules/` compose these AVM resource modules:
+
+- `avm/res/container-registry/registry:0.13.0`
+- `avm/res/operational-insights/workspace:0.12.0`
+- `avm/res/app/managed-environment:0.16.0`
+- `avm/res/app/container-app:0.23.0`
+- `avm/res/db-for-postgre-sql/flexible-server:0.10.0`
+- `avm/res/cache/redis-enterprise:0.5.1`
+
+Versions are deliberately pinned for repeatable deployments. Update a module only after reviewing its release notes, inputs, outputs, and `what-if` impact. The Container App wrapper retains its local managed-identity and `AcrPull` role-assignment resources because the identity is application-specific and the registry is created in the separate subscription-scoped bootstrap deployment.
 
 ## Local validation
 
@@ -74,6 +92,7 @@ Compile the templates before opening a pull request:
 ```text
 az bicep build --file infra/bootstrap.bicep
 az bicep build --file infra/main.bicep
+az bicep build --file infra/application.bicep
 ```
 
 The workflow runs `az deployment group what-if` before applying the environment deployment. Never provide deployment secrets through checked-in Bicep parameter files.

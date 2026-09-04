@@ -24,8 +24,8 @@ There are two environments in the same Azure subscription:
 
 | Environment | CAF code | GitHub Environment | Resource group         |
 | ----------- | -------- | ------------------ | ---------------------- |
-| Staging     | `stg`    | `staging`          | `rg-eshop-stg-weu-001` |
-| Production  | `prd`    | `production`       | `rg-eshop-prd-weu-001` |
+| Staging     | `stg`    | `staging`          | `rg-eshop-stg-swe-001` |
+| Production  | `prd`    | `production`       | `rg-eshop-prd-swe-001` |
 
 Rules:
 
@@ -34,9 +34,9 @@ Rules:
 - A Staging deployment must not reference, modify, or grant access to Production resources.
 - A Production deployment must not depend on a mutable Staging resource.
 - Use the same reusable Bicep modules for both environments with different parameters.
-- Production must be promoted using an immutable image tag that has already been validated in Staging.
+- Production must be promoted using the same immutable image tag after the Staging deployment succeeds.
 - Production deployments require a protected GitHub Environment and manual approval.
-- Pushes to `main` may deploy Staging automatically; they must not deploy Production automatically without an explicitly approved policy.
+- Pushes to `main` may run the fixed Staging → Production pipeline automatically, but Production must remain blocked by its protected Environment approval.
 
 ## CAF naming
 
@@ -48,23 +48,23 @@ For this repository:
 
 - Workload: `eshop`
 - Environment: `stg` or `prd`
-- Region: `weu` by default, but keep it parameterized
+- Region: `swe` by default for Sweden Central (`swedencentral`), but keep it parameterized
 - Instance: `001`
 
 Examples:
 
-- `rg-eshop-stg-weu-001`
-- `cae-eshop-stg-weu-001`
-- `ca-eshop-web-stg-weu-001`
-- `psql-eshop-stg-weu-001`
-- `redis-eshop-stg-weu-001`
-- `log-eshop-stg-weu-001`
+- `rg-eshop-stg-swe-001`
+- `cae-eshop-stg-swe-001`
+- `ca-eshop-web-stg-swe-001`
+- `psql-eshop-stg-swe-001`
+- `redis-eshop-stg-swe-001`
+- `log-eshop-stg-swe-001`
 
 Important naming rules:
 
 - Keep naming inputs parameterized; do not scatter literal names across modules.
 - Use resource-specific CAF abbreviations.
-- Respect Azure resource naming restrictions. For example, ACR names must be globally unique and alphanumeric, so `acreshopstgweu001` is valid while `acr-eshop-stg-weu-001` is not.
+- Respect Azure resource naming restrictions. For example, ACR names must be globally unique and alphanumeric, so `acreshopstgswe001` is valid while `acr-eshop-stg-swe-001` is not.
 - Use a deterministic instance number rather than random names unless uniqueness is an explicit requirement.
 - Keep names stable across updates so Bicep updates resources instead of replacing them.
 - Validate length, character, and global uniqueness constraints before deployment.
@@ -164,7 +164,7 @@ Organize workflows into these layers:
 
 1. CI workflow for pull requests targeting `main`.
 2. Reusable CD workflow accepting explicit environment and deployment inputs.
-3. Orchestration workflow that deploys Staging automatically and promotes Production manually.
+3. Orchestration workflow that deploys Staging and then promotes Production through its protected Environment approval.
 4. Composite actions for repeated build, publish, or validation logic.
 
 Every remote `uses:` reference must:
