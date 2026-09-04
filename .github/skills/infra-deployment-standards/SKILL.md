@@ -24,8 +24,8 @@ There are two environments in the same Azure subscription:
 
 | Environment | CAF code | GitHub Environment | Resource group         |
 | ----------- | -------- | ------------------ | ---------------------- |
-| Staging     | `stg`    | `staging`          | `rg-eshop-stg-weu-001` |
-| Production  | `prd`    | `production`       | `rg-eshop-prd-weu-001` |
+| Staging     | `stg`    | `staging`          | `rg-eshop-stg-swe-001` |
+| Production  | `prd`    | `production`       | `rg-eshop-prd-swe-001` |
 
 Rules:
 
@@ -48,23 +48,23 @@ For this repository:
 
 - Workload: `eshop`
 - Environment: `stg` or `prd`
-- Region: `weu` by default, but keep it parameterized
+- Region: `swe` by default for Sweden Central (`swedencentral`), but keep it parameterized
 - Instance: `001`
 
 Examples:
 
-- `rg-eshop-stg-weu-001`
-- `cae-eshop-stg-weu-001`
-- `ca-eshop-web-stg-weu-001`
-- `psql-eshop-stg-weu-001`
-- `redis-eshop-stg-weu-001`
-- `log-eshop-stg-weu-001`
+- `rg-eshop-stg-swe-001`
+- `cae-eshop-stg-swe-001`
+- `ca-eshop-web-stg-swe-001`
+- `psql-eshop-stg-swe-001`
+- `redis-eshop-stg-swe-001`
+- `log-eshop-stg-swe-001`
 
 Important naming rules:
 
 - Keep naming inputs parameterized; do not scatter literal names across modules.
 - Use resource-specific CAF abbreviations.
-- Respect Azure resource naming restrictions. For example, ACR names must be globally unique and alphanumeric, so `acreshopstgweu001` is valid while `acr-eshop-stg-weu-001` is not.
+- Respect Azure resource naming restrictions. For example, ACR names must be globally unique and alphanumeric, so `acreshopstgswe001` is valid while `acr-eshop-stg-swe-001` is not.
 - Use a deterministic instance number rather than random names unless uniqueness is an explicit requirement.
 - Keep names stable across updates so Bicep updates resources instead of replacing them.
 - Validate length, character, and global uniqueness constraints before deployment.

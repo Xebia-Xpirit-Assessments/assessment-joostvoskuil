@@ -30,10 +30,10 @@ jobs:
     uses: ./.github/workflows/cd.yml
     with:
       environment: staging
-      resource-group: rg-eshop-stg-weu-001
-      container-registry: acreshopstgweu001
-      location: westeurope
-      region-code: weu
+      resource-group: rg-eshop-stg-swe-001
+      container-registry: acreshopstgswe001
+      location: swedencentral
+      region-code: swe
       environment-code: stg
       image-tag: ${{ inputs.image-tag || github.sha }}
     secrets: inherit
@@ -47,10 +47,10 @@ jobs:
     needs: deploy-staging
     with:
       environment: production
-      resource-group: rg-eshop-prd-weu-001
-      container-registry: acreshopprdweu001
-      location: westeurope
-      region-code: weu
+      resource-group: rg-eshop-prd-swe-001
+      container-registry: acreshopprdswe001
+      location: swedencentral
+      region-code: swe
       environment-code: prd
       image-tag: ${{ inputs.image-tag }}
     secrets: inherit

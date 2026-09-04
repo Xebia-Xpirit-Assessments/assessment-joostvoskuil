@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          resource_group='rg-eshop-stg-weu-001'
+          resource_group='rg-eshop-stg-swe-001'
           if az group exists --name "$resource_group" | grep --quiet '^true$'; then
             echo "Deleting explicitly approved test resource group: $resource_group"
             az group delete --name "$resource_group" --yes
@@ -60,7 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          resource_group='rg-eshop-prd-weu-001'
+          resource_group='rg-eshop-prd-swe-001'
           if az group exists --name "$resource_group" | grep --quiet '^true$'; then
             echo "Deleting explicitly approved test resource group: $resource_group"
             az group delete --name "$resource_group" --yes

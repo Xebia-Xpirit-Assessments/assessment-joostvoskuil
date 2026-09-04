@@ -3,7 +3,7 @@ description: Builds the deployable eShop service images and pushes them to an au
 
 inputs:
   registry:
-    description: Azure Container Registry login server, for example acreshopstgweu001.azurecr.io.
+    description: Azure Container Registry login server, for example acreshopstgswe001.azurecr.io.
     required: true
   image-tag:
     description: Immutable tag to apply to every service image.

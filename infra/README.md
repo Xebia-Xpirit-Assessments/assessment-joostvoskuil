@@ -8,16 +8,16 @@ Staging and Production use the same Azure subscription but are isolated in disti
 
 | Environment | CAF code | Resource group | Container registry |
 | --- | --- | --- | --- |
-| Staging | `stg` | `rg-eshop-stg-weu-001` | `acreshopstgweu001` |
-| Production | `prd` | `rg-eshop-prd-weu-001` | `acreshopprdweu001` |
+| Staging | `stg` | `rg-eshop-stg-swe-001` | `acreshopstgswe001` |
+| Production | `prd` | `rg-eshop-prd-swe-001` | `acreshopprdswe001` |
 
-Names follow the Azure CAF pattern `<resource-abbreviation>-<workload>-<environment>-<region>-<instance>`. Examples include `cae-eshop-stg-weu-001` for the Container Apps environment and `ca-eshop-web-prd-weu-001` for the Production web app. Azure Container Registry names use the same components without separators because ACR permits alphanumeric characters only; registry names must also be globally unique.
+Deployments use the Sweden Central Azure region (`swedencentral`) and the CAF region code `swe`. Names follow the Azure CAF pattern `<resource-abbreviation>-<workload>-<environment>-<region>-<instance>`. Examples include `cae-eshop-stg-swe-001` for the Container Apps environment and `ca-eshop-web-prd-swe-001` for the Production web app. Azure Container Registry names use the same components without separators because ACR permits alphanumeric characters only; registry names must also be globally unique.
 
 ## Architecture
 
 Each environment creates its own low-cost resources:
 
-- ACR Basic (`acr`)
+- ACR Standard (`acr`)
 - Container Apps Consumption environment (`cae`)
 - Log Analytics workspace (`log`)
 - PostgreSQL Flexible Server, Burstable `Standard_B1ms`, no high availability (`psql`)
@@ -53,8 +53,8 @@ Protect the `production` GitHub Environment with required reviewers. Staging is 
 
 `.github/workflows/purge-test-environments.yml` deletes both test resource groups every night at 02:00 UTC:
 
-- `rg-eshop-stg-weu-001`
-- `rg-eshop-prd-weu-001`
+- `rg-eshop-stg-swe-001`
+- `rg-eshop-prd-swe-001`
 
 The workflow uses the `staging` and `production` GitHub Environments independently, so each Azure identity needs delete permission only on its own resource group. It uses OIDC and waits for each deletion to finish. The workflow can also be started manually from the Actions tab. This is intentionally destructive and is appropriate only because these Azure environments are test setup; do not reuse it for real production workloads. Re-running the deployment workflow recreates the required resources.
 

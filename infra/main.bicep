@@ -1,6 +1,6 @@
 targetScope = 'resourceGroup'
 
-@description('Azure region, for example westeurope.')
+@description('Azure region, for example swedencentral.')
 param location string
 
 @allowed([
@@ -14,7 +14,7 @@ param environment string
 param workloadName string = 'eshop'
 
 @description('CAF region abbreviation.')
-param regionCode string = 'weu'
+param regionCode string = 'swe'
 
 @description('CAF instance number.')
 param instance string = '001'
