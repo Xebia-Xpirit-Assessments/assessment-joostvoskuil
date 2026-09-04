@@ -7,6 +7,9 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    labels:
+      - ".NET"
+      - "dependencies"
     groups:
       minor-and-patch:
         update-types:
@@ -26,6 +29,9 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    labels:
+      - "NPM"
+      - "dependencies"
     groups:
       minor-and-patch:
         update-types:
@@ -37,6 +43,9 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    labels:
+      - "GitHubActions"
+      - "dependencies"
     groups:
       minor-and-patch:
         update-types:

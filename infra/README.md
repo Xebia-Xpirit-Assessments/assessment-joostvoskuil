@@ -37,6 +37,8 @@ Create two GitHub Environments named exactly `staging` and `production`. Store t
 - `AZURE_SUBSCRIPTION_ID`
 - `POSTGRES_ADMINISTRATOR_PASSWORD`
 - `RABBITMQ_PASSWORD`
+- `E2E_USERNAME` (Staging only)
+- `E2E_PASSWORD` (Staging only)
 
 The three `AZURE_*` values are intentionally Environment secrets, even though both environments use the same subscription ID. Use separate Entra application registrations or managed identities for Staging and Production so each can receive narrowly-scoped permissions.
 
@@ -61,11 +63,14 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 ## Deployment flow
 
 1. CI runs for pull requests to `main` and builds the .NET web solution and Bicep templates without Azure credentials.
-2. A push to `main` invokes the reusable CD workflow for Staging.
-3. CD signs in with GitHub OIDC, creates/updates the Staging resource group and ACR, builds SHA-tagged container images, runs Bicep `what-if`, then deploys the Container Apps environment.
-4. After Staging succeeds, the protected Production job requests approval and then deploys the same immutable SHA using only the Production Environment’s secrets and resource group.
+2. A relevant push to `main`, or an explicit manual dispatch, selects shared infrastructure and only the affected application services. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
+3. `deploy-infrastructure.yml` owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. `deploy-service.yml` owns one selected application Container App, its managed identity, and its ACR pull role assignment.
+4. Selected Staging services build and deploy independently in a matrix of up to five parallel jobs. Every service uses the full commit SHA as its image tag and uses incremental Bicep deployment, so deploying one service cannot delete or reset its siblings.
+5. The complete authenticated Playwright suite runs against the deployed Staging WebApp after every staging run. Its success is a hard prerequisite for Production. The protected Production Environment then rebuilds the same SHA into the Production registry and promotes selected services in parallel after approval.
 
-`bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates all environment resources. This prevents a Staging run from changing Production resources.
+Manual dispatch supports `all`, `infrastructure`, or one of `webapp`, `identity-api`, `basket-api`, `catalog-api`, and `ordering-api`. Infrastructure-only and service-only runs assume the corresponding existing application/shared resources are already present; use `all` after a nightly purge or for first provisioning.
+
+`bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates shared resources only. `application.bicep` is resource-group-scoped and deploys exactly one allow-listed application service. This prevents a Staging run from changing Production resources and prevents a service update from owning unrelated revisions.
 
 ## Azure Verified Modules
 
@@ -87,6 +92,7 @@ Compile the templates before opening a pull request:
 ```text
 az bicep build --file infra/bootstrap.bicep
 az bicep build --file infra/main.bicep
+az bicep build --file infra/application.bicep
 ```
 
 The workflow runs `az deployment group what-if` before applying the environment deployment. Never provide deployment secrets through checked-in Bicep parameter files.

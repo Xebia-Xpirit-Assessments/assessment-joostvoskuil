@@ -1,12 +1,50 @@
-name: eShop - Build
+name: CI
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'infra/**'
+      - '*.sln'
+      - '*.slnf'
+      - '*.props'
+      - '*.targets'
+      - 'global.json'
+      - 'nuget.config'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.ts'
+      - '.dockerignore'
+      - 'src/**/Dockerfile'
+      - '.github/workflows/ci.yml'
+      - '.github/actions/**'
+      - '.github/scripts/**'
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'infra/**'
+      - '*.sln'
+      - '*.slnf'
+      - '*.props'
+      - '*.targets'
+      - 'global.json'
+      - 'nuget.config'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.ts'
+      - '.dockerignore'
+      - 'src/**/Dockerfile'
+      - '.github/workflows/ci.yml'
+      - '.github/actions/**'
+      - '.github/scripts/**'
 
 permissions:
   contents: read
@@ -23,6 +61,7 @@ jobs:
         run: |
           az bicep build --file infra/bootstrap.bicep --stdout > /dev/null
           az bicep build --file infra/main.bicep --stdout > /dev/null
+          az bicep build --file infra/application.bicep --stdout > /dev/null
 
       - name: Validate Docker build contexts
         run: |
@@ -128,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      code-quality: write
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -227,7 +266,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      code-quality: write
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -246,3 +285,24 @@ jobs:
           file: ${{ matrix.name }}.cobertura.xml
           language: C#
           label: code-coverage/functional-${{ matrix.name }}
+
+  required:
+    name: Required
+    needs:
+      - infrastructure
+      - build
+      - unit-tests
+      - upload-coverage-unit
+      - functional-tests
+      - upload-coverage-functional
+    if: ${{ always() && needs.infrastructure.result != 'failure' && needs.infrastructure.result != 'cancelled' && needs.build.result != 'failure' && needs.build.result != 'cancelled' && needs.unit-tests.result != 'failure' && needs.unit-tests.result != 'cancelled' && needs.upload-coverage-unit.result != 'failure' && needs.upload-coverage-unit.result != 'cancelled' && needs.functional-tests.result != 'failure' && needs.functional-tests.result != 'cancelled' && needs.upload-coverage-functional.result != 'failure' && needs.upload-coverage-functional.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm required CI jobs completed
+        run: |
+          echo "Infrastructure: ${{ needs.infrastructure.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Unit tests: ${{ needs.unit-tests.result }}"
+          echo "Unit coverage: ${{ needs.upload-coverage-unit.result }}"
+          echo "Functional tests: ${{ needs.functional-tests.result }}"
+          echo "Functional coverage: ${{ needs.upload-coverage-functional.result }}"

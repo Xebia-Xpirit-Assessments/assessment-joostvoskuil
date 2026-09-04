@@ -1,20 +1,81 @@
-name: eShop - Deploy
+name: eShop - Selective deployment
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - 'src/WebApp/**'
+      - 'src/WebAppComponents/**'
+      - 'src/Identity.API/**'
+      - 'src/Basket.API/**'
+      - 'src/Catalog.API/**'
+      - 'src/Ordering.API/**'
+      - 'src/Ordering.Domain/**'
+      - 'src/Ordering.Infrastructure/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'src/EventBus/**'
+      - 'src/EventBusRabbitMQ/**'
+      - 'src/IntegrationEventLogEF/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+      - '.dockerignore'
+      - '.github/actions/build-push-image/**'
+      - '.github/workflows/deploy*.yml'
+      - '.github/scripts/detect-deployment-units.sh'
   workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        default: all
+        type: choice
+        options: [all, infrastructure, webapp, identity-api, basket-api, catalog-api, ordering-api]
 
 permissions:
   contents: read
 
+concurrency:
+  group: eshop-deployment
+  cancel-in-progress: false
+
+env:
+  LOCATION: swedencentral
+  REGION_CODE: swe
+
 jobs:
-  deploy-staging:
+  changes:
+    name: Select deployment units
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.detect.outputs.infra }}
+      services: ${{ steps.detect.outputs.services }}
+    steps:
+      - name: Check out history for change detection
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Detect affected units
+        id: detect
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.before || github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          TARGET: ${{ inputs.target || 'auto' }}
+        run: |
+          chmod +x .github/scripts/detect-deployment-units.sh
+          .github/scripts/detect-deployment-units.sh "$BASE_SHA" "$HEAD_SHA" "$TARGET"
+
+  staging-infrastructure:
+    needs: changes
+    if: ${{ needs.changes.outputs.infra == 'true' }}
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/cd.yml
+    uses: ./.github/workflows/deploy-infrastructure.yml
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
@@ -24,13 +85,88 @@ jobs:
       environment-code: stg
     secrets: inherit
 
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
+  staging-services:
+    needs: [changes, staging-infrastructure]
+    if: ${{ always() && needs.changes.outputs.services != '{"include":[]}' && (needs.staging-infrastructure.result == 'success' || needs.staging-infrastructure.result == 'skipped') }}
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix: ${{ fromJSON(needs.changes.outputs.services) }}
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/cd.yml
-    needs: deploy-staging
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      environment: staging
+      resource-group: rg-eshop-stg-swe-001
+      container-registry: acreshopstgswe001
+      location: swedencentral
+      region-code: swe
+      environment-code: stg
+      service: ${{ matrix.service }}
+      image-tag: ${{ github.sha }}
+    secrets: inherit
+
+  staging-e2e:
+    name: Deployed Staging E2E gate
+    needs: [changes, staging-infrastructure, staging-services]
+    if: ${{ always() && needs.changes.result == 'success' && (needs.staging-infrastructure.result == 'success' || needs.staging-infrastructure.result == 'skipped') && (needs.staging-services.result == 'success' || needs.staging-services.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Resolve deployed WebApp URL
+        id: webapp
+        shell: bash
+        run: |
+          fqdn=$(az containerapp show --name ca-eshop-web-stg-swe-001 --resource-group rg-eshop-stg-swe-001 --query properties.configuration.ingress.fqdn -o tsv)
+          [[ -n "$fqdn" ]] || { echo 'Staging WebApp has no public FQDN' >&2; exit 1; }
+          echo "base_url=https://$fqdn" >> "$GITHUB_OUTPUT"
+      - name: Set up Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install browser test dependencies
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Run deployed Staging E2E suite
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: ${{ steps.webapp.outputs.base_url }}
+          USERNAME1: ${{ secrets.E2E_USERNAME }}
+          PASSWORD: ${{ secrets.E2E_PASSWORD }}
+        run: npx playwright test
+      - name: Upload Playwright diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-staging-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+            playwright/.auth
+          if-no-files-found: ignore
+          retention-days: 7
+
+  production-infrastructure:
+    needs: [changes, staging-e2e]
+    if: ${{ needs.staging-e2e.result == 'success' && needs.changes.outputs.infra == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-infrastructure.yml
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001
@@ -38,4 +174,26 @@ jobs:
       location: swedencentral
       region-code: swe
       environment-code: prd
+    secrets: inherit
+
+  production-services:
+    needs: [changes, staging-e2e, production-infrastructure]
+    if: ${{ always() && needs.staging-e2e.result == 'success' && (needs.production-infrastructure.result == 'success' || needs.production-infrastructure.result == 'skipped') && needs.changes.outputs.services != '{"include":[]}' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix: ${{ fromJSON(needs.changes.outputs.services) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      environment: production
+      resource-group: rg-eshop-prd-swe-001
+      container-registry: acreshopprdswe001
+      location: swedencentral
+      region-code: swe
+      environment-code: prd
+      service: ${{ matrix.service }}
+      image-tag: ${{ github.sha }}
     secrets: inherit
