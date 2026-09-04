@@ -1,4 +1,4 @@
-name: Purge test environments
+name: eShop - Purge Azure Environments
 
 # This workflow intentionally targets only the two documented test resource groups.
 # Do not add user-controlled resource-group inputs to this destructive workflow.

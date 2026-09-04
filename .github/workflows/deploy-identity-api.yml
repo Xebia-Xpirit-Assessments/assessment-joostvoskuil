@@ -1,0 +1,84 @@
+name: eShop - Deploy Identity API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Identity.API/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'infra/application.bicep'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+      - '.dockerignore'
+      - '.github/actions/build-push-image/**'
+      - '.github/workflows/ci-service.yml'
+      - '.github/workflows/deploy-service.yml'
+      - '.github/workflows/e2e-gate.yml'
+      - '.github/workflows/deploy-identity-api.yml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eshop-deploy-identity-api
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/ci-service.yml
+    with:
+      service: identity-api
+
+  staging:
+    needs: ci
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      environment: staging
+      resource-group: rg-eshop-stg-swe-001
+      container-registry: acreshopstgswe001
+      location: swedencentral
+      region-code: swe
+      environment-code: stg
+      service: identity-api
+      image-tag: ${{ github.sha }}
+    secrets: inherit
+
+  staging-e2e:
+    needs: staging
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/e2e-gate.yml
+    secrets: inherit
+
+  production:
+    needs: staging-e2e
+    if: ${{ needs.staging-e2e.result == 'success' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      environment: production
+      resource-group: rg-eshop-prd-swe-001
+      container-registry: acreshopprdswe001
+      location: swedencentral
+      region-code: swe
+      environment-code: prd
+      service: identity-api
+      image-tag: ${{ github.sha }}
+    secrets: inherit
