@@ -46,3 +46,11 @@
 - Functional tests require Docker because their fixtures start Aspire-managed containers. End-to-end tests use the `webServer` configured in [`playwright.config.ts`](../playwright.config.ts).
 - Use the [`run-eshop-tests`](skills/run-eshop-tests/SKILL.md) skill for selecting and running test suites. Use the existing [`prepare-local-eshop-environment`](skills/prepare-local-eshop-environment/SKILL.md) skill for SDK, Aspire workload, Docker, restore, or AppHost setup failures.
 - Report exactly what was run and distinguish assertion failures from missing workloads, unavailable Docker, unavailable browsers, or absent local credentials.
+
+### Copilot Cloud agent test requirements
+
+- Before completing a task, the Copilot Cloud agent must run the unit tests for every impacted component, API, or project area. Select the narrowest relevant test project rather than relying only on a full-solution build; run both `Basket.UnitTests` and `Ordering.UnitTests` when the change crosses their boundaries.
+- The Copilot Cloud agent must also run all backend functional test projects: `tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj` and `tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj`.
+- Run functional tests with the .NET 8 SDK and restored .NET Aspire workload. Docker must be available because the Aspire fixtures start PostgreSQL and other managed resources.
+- Do not silently skip required tests. If the Cloud environment lacks Docker, the Aspire workload, MAUI tooling, browsers, or credentials, report the exact blocked command and environment limitation, and distinguish that limitation from a test failure.
+- Include the executed test projects and their pass/fail/blocked status in the final task summary.

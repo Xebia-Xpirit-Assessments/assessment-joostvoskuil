@@ -22,10 +22,10 @@ Use this skill for all Azure infrastructure and deployment changes in this repos
 
 There are two environments in the same Azure subscription:
 
-| Environment | CAF code | GitHub Environment | Resource group |
-| --- | --- | --- | --- |
-| Staging | `stg` | `staging` | `rg-eshop-stg-weu-001` |
-| Production | `prd` | `production` | `rg-eshop-prd-weu-001` |
+| Environment | CAF code | GitHub Environment | Resource group         |
+| ----------- | -------- | ------------------ | ---------------------- |
+| Staging     | `stg`    | `staging`          | `rg-eshop-stg-weu-001` |
+| Production  | `prd`    | `production`       | `rg-eshop-prd-weu-001` |
 
 Rules:
 

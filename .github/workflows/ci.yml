@@ -9,8 +9,27 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    name: Build and validate infrastructure
+  infrastructure:
+    name: Validate Bicep and Docker contexts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate Bicep
+        run: |
+          az bicep build --file infra/bootstrap.bicep --stdout > /dev/null
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: Validate Docker build contexts
+        run: |
+          test -f .dockerignore
+          for dockerfile in src/{WebApp,Identity.API,Basket.API,Catalog.API,Ordering.API}/Dockerfile; do
+            test -f "$dockerfile"
+          done
+
+  build:
+    name: Build web solution
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -25,19 +44,80 @@ jobs:
         run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
 
       - name: Restore web solution
-        run: dotnet restore eShop.Web.slnf --disable-parallel
+        run: dotnet restore eShop.Web.slnf
 
       - name: Build web solution
         run: dotnet build eShop.Web.slnf --configuration Release --no-restore
 
-      - name: Validate Bicep
-        run: |
-          az bicep build --file infra/bootstrap.bicep --stdout > /dev/null
-          az bicep build --file infra/main.bicep --stdout > /dev/null
+  unit-tests:
+    name: Unit tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Basket
+            project: tests/Basket.UnitTests/Basket.UnitTests.csproj
+          - name: Ordering
+            project: tests/Ordering.UnitTests/Ordering.UnitTests.csproj
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Validate Docker build contexts
-        run: |
-          test -f .dockerignore
-          for dockerfile in src/{WebApp,Identity.API,Basket.API,Catalog.API,Ordering.API}/Dockerfile; do
-            test -f "$dockerfile"
-          done
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run unit tests
+        run: >-
+          dotnet test "${{ matrix.project }}"
+          --configuration Release
+          --logger "trx;LogFileName=${{ matrix.name }}.trx"
+          --results-directory test-results
+
+      - name: Upload unit-test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unit-test-results-${{ matrix.name }}
+          path: test-results
+          if-no-files-found: ignore
+
+  functional-tests:
+    name: Functional tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Catalog
+            project: tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj
+          - name: Ordering
+            project: tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore .NET Aspire workload
+        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
+
+      - name: Run functional tests
+        run: >-
+          dotnet test "${{ matrix.project }}"
+          --configuration Release
+          --logger "trx;LogFileName=${{ matrix.name }}.trx"
+          --results-directory test-results
+
+      - name: Upload functional-test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: functional-test-results-${{ matrix.name }}
+          path: test-results
+          if-no-files-found: ignore
