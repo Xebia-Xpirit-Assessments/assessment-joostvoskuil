@@ -1,0 +1,12 @@
+.git
+.github
+.devcontainer
+.vscode
+**/bin
+**/obj
+**/TestResults
+node_modules
+playwright-report
+test-results
+.env
+README*.md

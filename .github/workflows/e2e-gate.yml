@@ -1,0 +1,60 @@
+name: _eShop - Staging E2E gate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  e2e:
+    name: Deployed Staging E2E gate
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Resolve deployed WebApp URL
+        id: webapp
+        shell: bash
+        run: |
+          fqdn=$(az containerapp show --name ca-eshop-web-stg-swe-001 --resource-group rg-eshop-stg-swe-001 --query properties.configuration.ingress.fqdn -o tsv)
+          [[ -n "$fqdn" ]] || { echo 'Staging WebApp has no public FQDN' >&2; exit 1; }
+          echo "base_url=https://$fqdn" >> "$GITHUB_OUTPUT"
+      - name: Set up Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install browser test dependencies
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Run deployed Staging E2E suite
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: ${{ steps.webapp.outputs.base_url }}
+          USERNAME1: ${{ secrets.E2E_USERNAME }}
+          PASSWORD: ${{ secrets.E2E_PASSWORD }}
+        run: npx playwright test
+      - name: Upload Playwright diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-staging-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+            playwright/.auth
+          if-no-files-found: ignore
+          retention-days: 7

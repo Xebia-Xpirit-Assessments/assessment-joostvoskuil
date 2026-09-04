@@ -1,19 +1,50 @@
 version: 2
 updates:
   - package-ecosystem: "nuget"
-    directory: "/"
+    directories:
+      - "/src/**"
+      - "/tests/**"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 999
+    open-pull-requests-limit: 10
+    labels:
+      - ".NET"
+      - "dependencies"
+    groups:
+      patch:
+        update-types:
+          - "patch"
+    ignore:
+      # Aspire 8 is tied to the .NET 8 toolchain; upgrade the whole family deliberately.
+      - dependency-name: "Aspire.*"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "Microsoft.Extensions.ServiceDiscovery*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 999
+    open-pull-requests-limit: 10
+    labels:
+      - "NPM"
+      - "dependencies"
+    groups:
+      patch:
+        update-types:
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 999
+    open-pull-requests-limit: 10
+    labels:
+      - "GitHubActions"
+      - "dependencies"
+    groups:
+      patch:
+        update-types:
+          - "patch"

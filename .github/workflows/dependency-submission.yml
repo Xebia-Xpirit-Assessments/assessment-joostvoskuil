@@ -1,0 +1,30 @@
+name: Dependency Submission
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  dependency-submission:
+    name: Submit NuGet and npm dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET and Node.js toolchain
+        uses: ./.github/actions/setup-dotnet-node-toolchain
+        with:
+          restore-web-solution: 'true'
+          install-npm-dependencies: 'true'
+
+      - name: Submit dependency snapshot
+        uses: advanced-security/component-detection-dependency-submission-action@b282c67b1008fde9b60da4bdfcd8849613e293b2 # v0.1.6
+        with:
+          detectorsCategories: NuGet,Npm

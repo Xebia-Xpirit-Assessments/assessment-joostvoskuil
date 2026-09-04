@@ -1,0 +1,69 @@
+name: eShop - Purge Azure Environments
+
+# This workflow intentionally targets only the two documented test resource groups.
+# Do not add user-controlled resource-group inputs to this destructive workflow.
+on:
+  schedule:
+    # Every night at 02:00 UTC.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  purge-staging:
+    name: Purge Staging resource group
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Sign in to Azure with Staging OIDC identity
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete Staging resource group
+        shell: bash
+        run: |
+          set -euo pipefail
+          resource_group='rg-eshop-stg-swe-001'
+          if az group exists --name "$resource_group" | grep --quiet '^true$'; then
+            echo "Deleting explicitly approved test resource group: $resource_group"
+            az group delete --name "$resource_group" --yes
+          else
+            echo "Resource group does not exist: $resource_group"
+          fi
+
+  purge-production:
+    name: Purge Production resource group
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Sign in to Azure with Production OIDC identity
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete Production resource group
+        shell: bash
+        run: |
+          set -euo pipefail
+          resource_group='rg-eshop-prd-swe-001'
+          if az group exists --name "$resource_group" | grep --quiet '^true$'; then
+            echo "Deleting explicitly approved test resource group: $resource_group"
+            az group delete --name "$resource_group" --yes
+          else
+            echo "Resource group does not exist: $resource_group"
+          fi
