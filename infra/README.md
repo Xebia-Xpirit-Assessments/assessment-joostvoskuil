@@ -1,6 +1,6 @@
 # eShop Azure deployment
 
-This folder deploys the minimal eShop shopping slice with **Bicep** and **GitHub Actions**. It intentionally does not use `azd` or Azure DevOps.
+This folder deploys the minimal eShop shopping slice with **Bicep** and **GitHub Actions**. It intentionally does not use `azd` or Azure DevOps. Resource modules delegate to version-pinned [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) from the public Bicep registry; the local wrappers preserve this deployment's CAF names, low-cost SKUs, and application configuration contract.
 
 ## Environments and CAF names
 
@@ -47,7 +47,7 @@ Configure an Entra federated credential for each identity with the GitHub reposi
 
 Grant each identity deployment rights only over its corresponding resource group. The identity also needs `AcrPush` on its environment registry to publish images. Do not use an Azure client secret, publish profile, registry admin account, or subscription-wide Owner role.
 
-Protect the `production` GitHub Environment with required reviewers. Every push to `main`, or manual dispatch, follows the fixed Staging → Production promotion flow. Production proceeds only after Staging succeeds and its required Environment approval is granted. A manual dispatch may provide a complete immutable commit SHA; otherwise the dispatched revision is used.
+Protect the `production` GitHub Environment with required reviewers. Every push to `main`, or manual dispatch, follows the fixed Staging → Production promotion flow. Production proceeds only after Staging succeeds and its required Environment approval is granted. Both stages use the workflow revision’s immutable commit SHA.
 
 ## Nightly cost cleanup
 
@@ -66,6 +66,19 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 4. After Staging succeeds, the protected Production job requests approval and then deploys the same immutable SHA using only the Production Environment’s secrets and resource group.
 
 `bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates all environment resources. This prevents a Staging run from changing Production resources.
+
+## Azure Verified Modules
+
+The local modules in `infra/modules/` compose these AVM resource modules:
+
+- `avm/res/container-registry/registry:0.13.0`
+- `avm/res/operational-insights/workspace:0.12.0`
+- `avm/res/app/managed-environment:0.16.0`
+- `avm/res/app/container-app:0.23.0`
+- `avm/res/db-for-postgre-sql/flexible-server:0.10.0`
+- `avm/res/cache/redis:0.18.0`
+
+Versions are deliberately pinned for repeatable deployments. Update a module only after reviewing its release notes, inputs, outputs, and `what-if` impact. The Container App wrapper retains its local managed-identity and `AcrPull` role-assignment resources because the identity is application-specific and the registry is created in the separate subscription-scoped bootstrap deployment.
 
 ## Local validation
 

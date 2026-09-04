@@ -27,10 +27,6 @@ on:
         description: 'CAF environment abbreviation. Use stg or prd.'
         required: true
         type: string
-      image-tag:
-        description: Immutable full Git commit SHA to build and deploy.
-        required: true
-        type: string
 permissions:
   contents: read
   id-token: write
@@ -47,7 +43,7 @@ jobs:
       - name: Check out immutable source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.image-tag }}
+          ref: ${{ github.sha }}
 
       - name: Sign in to Azure with OpenID Connect
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.2.0
@@ -76,7 +72,7 @@ jobs:
         uses: ./.github/actions/build-push-images
         with:
           registry: ${{ inputs.container-registry }}.azurecr.io
-          image-tag: ${{ inputs.image-tag }}
+          image-tag: ${{ github.sha }}
 
       - name: Preview environment deployment
         shell: bash
@@ -89,7 +85,7 @@ jobs:
                          environment="${{ inputs.environment-code }}" \
                          regionCode="${{ inputs.region-code }}" \
                          containerRegistryName="${{ inputs.container-registry }}" \
-                         imageTag="${{ inputs.image-tag }}" \
+                         imageTag="${{ github.sha }}" \
                          postgresAdministratorPassword="${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}" \
                          rabbitMqPassword="${{ secrets.RABBITMQ_PASSWORD }}"
 
@@ -104,6 +100,6 @@ jobs:
                          environment="${{ inputs.environment-code }}" \
                          regionCode="${{ inputs.region-code }}" \
                          containerRegistryName="${{ inputs.container-registry }}" \
-                         imageTag="${{ inputs.image-tag }}" \
+                         imageTag="${{ github.sha }}" \
                          postgresAdministratorPassword="${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}" \
                          rabbitMqPassword="${{ secrets.RABBITMQ_PASSWORD }}"
