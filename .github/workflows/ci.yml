@@ -167,7 +167,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      code-quality: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -186,8 +187,6 @@ jobs:
           file: ${{ matrix.name }}.cobertura.xml
           language: C#
           label: code-coverage/unit-${{ matrix.name }}
-          # The report upload succeeds, but processing-status polling currently returns HTTP 403.
-          wait-for-processing-timeout: 0
 
   functional-tests:
     name: Functional tests (${{ matrix.name }})
@@ -268,7 +267,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      code-quality: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -308,5 +308,3 @@ jobs:
           echo "Unit coverage: ${{ needs.upload-coverage-unit.result }}"
           echo "Functional tests: ${{ needs.functional-tests.result }}"
           echo "Functional coverage: ${{ needs.upload-coverage-functional.result }}"
-          # The report upload succeeds, but processing-status polling currently returns HTTP 403.
-          wait-for-processing-timeout: 0
