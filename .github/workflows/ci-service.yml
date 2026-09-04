@@ -19,13 +19,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore .NET Aspire workload
-        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
+      - name: Set up .NET and Node.js toolchain
+        uses: ./.github/actions/setup-dotnet-node-toolchain
 
       - name: Resolve project path
         id: project
@@ -72,68 +67,42 @@ jobs:
           test -f .dockerignore
           test -f "$dockerfile"
 
-  detect-tests:
-    name: Detect test projects (${{ inputs.service }})
+  unit-tests:
+    name: Unit tests (${{ inputs.service }})
+    if: ${{ contains(fromJSON('["webapp","basket-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
-    outputs:
-      tests: ${{ steps.detect.outputs.tests }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
     steps:
-      - name: Resolve test projects for service
-        id: detect
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET and Node.js toolchain
+        uses: ./.github/actions/setup-dotnet-node-toolchain
+
+      - name: Resolve unit test project
+        id: project
         shell: bash
         env:
           SERVICE: ${{ inputs.service }}
         run: |
           case "$SERVICE" in
-            webapp)
-              entries='{"name":"ClientApp","project":"tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj","kind":"unit"}' ;;
-            identity-api)
-              entries='' ;;
-            basket-api)
-              entries='{"name":"Basket","project":"tests/Basket.UnitTests/Basket.UnitTests.csproj","kind":"unit"}' ;;
-            catalog-api)
-              entries='{"name":"Catalog","project":"tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj","kind":"functional"}' ;;
-            ordering-api)
-              entries='{"name":"Ordering-Unit","project":"tests/Ordering.UnitTests/Ordering.UnitTests.csproj","kind":"unit"},{"name":"Ordering-Functional","project":"tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj","kind":"functional"}' ;;
-            *) echo "Unsupported service: $SERVICE" >&2; exit 2 ;;
+            webapp) project='tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj' ;;
+            basket-api) project='tests/Basket.UnitTests/Basket.UnitTests.csproj' ;;
+            ordering-api) project='tests/Ordering.UnitTests/Ordering.UnitTests.csproj' ;;
+            *) echo "No unit tests for service: $SERVICE" >&2; exit 2 ;;
           esac
-          if [[ -n "$entries" ]]; then
-            tests_json="{\"include\":[$entries]}"
-          else
-            tests_json='{"include":[]}'
-          fi
-          echo "tests=$tests_json" >> "$GITHUB_OUTPUT"
+          echo "path=$project" >> "$GITHUB_OUTPUT"
 
-  tests:
-    name: Tests (${{ inputs.service }} / ${{ matrix.name }})
-    needs: detect-tests
-    if: ${{ needs.detect-tests.outputs.tests != '{"include":[]}' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.detect-tests.outputs.tests) }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore .NET Aspire workload
-        if: ${{ matrix.kind == 'functional' }}
-        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
-
-      - name: Run tests
+      - name: Run unit tests
         run: >-
-          dotnet test "${{ matrix.project }}"
+          dotnet test "${{ steps.project.outputs.path }}"
           --configuration Release
           --collect:"XPlat Code Coverage"
-          --logger "trx;LogFileName=${{ matrix.name }}.trx"
+          --logger "trx;LogFileName=unit.trx"
           --results-directory test-results
 
       - name: Prepare Cobertura coverage report
@@ -144,7 +113,7 @@ jobs:
           mkdir -p coverage
           coverage_file=$(find test-results -name coverage.cobertura.xml -print -quit || true)
           if [[ -n "$coverage_file" ]]; then
-            cp "$coverage_file" "coverage/${{ matrix.name }}.cobertura.xml"
+            cp "$coverage_file" coverage/unit.cobertura.xml
           else
             echo "No Cobertura coverage report was generated."
           fi
@@ -153,7 +122,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-results-${{ inputs.service }}-${{ matrix.name }}
+          name: test-results-${{ inputs.service }}-unit
           path: test-results
           if-no-files-found: ignore
 
@@ -161,40 +130,92 @@ jobs:
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         with:
-          name: Tests (${{ inputs.service }} / ${{ matrix.name }})
+          name: Unit tests (${{ inputs.service }})
           path: test-results/*.trx
           reporter: dotnet-trx
           fail-on-empty: false
-          report-title: Tests (${{ inputs.service }} / ${{ matrix.name }})
+          report-title: Unit tests (${{ inputs.service }})
 
-      - name: Upload coverage artifact
+      - name: Upload coverage
         if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
-          name: coverage-report-${{ inputs.service }}-${{ matrix.name }}
-          path: coverage/${{ matrix.name }}.cobertura.xml
+          file: coverage/unit.cobertura.xml
+          language: C#
+          label: code-coverage/unit-${{ inputs.service }}
 
-  upload-coverage:
-    name: Upload coverage (${{ inputs.service }} / ${{ matrix.name }})
-    needs: [detect-tests, tests]
-    if: ${{ !cancelled() && needs.tests.result == 'success' && needs.detect-tests.outputs.tests != '{"include":[]}' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+  functional-tests:
+    name: Functional tests (${{ inputs.service }})
+    if: ${{ contains(fromJSON('["catalog-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      checks: write
       code-quality: write
       pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.detect-tests.outputs.tests) }}
     steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET and Node.js toolchain
+        uses: ./.github/actions/setup-dotnet-node-toolchain
+
+      - name: Resolve functional test project
+        id: project
+        shell: bash
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: |
+          case "$SERVICE" in
+            catalog-api) project='tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj' ;;
+            ordering-api) project='tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj' ;;
+            *) echo "No functional tests for service: $SERVICE" >&2; exit 2 ;;
+          esac
+          echo "path=$project" >> "$GITHUB_OUTPUT"
+
+      - name: Run functional tests
+        run: >-
+          dotnet test "${{ steps.project.outputs.path }}"
+          --configuration Release
+          --collect:"XPlat Code Coverage"
+          --logger "trx;LogFileName=functional.trx"
+          --results-directory test-results
+
+      - name: Prepare Cobertura coverage report
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          coverage_file=$(find test-results -name coverage.cobertura.xml -print -quit || true)
+          if [[ -n "$coverage_file" ]]; then
+            cp "$coverage_file" coverage/functional.cobertura.xml
+          else
+            echo "No Cobertura coverage report was generated."
+          fi
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: coverage-report-${{ inputs.service }}-${{ matrix.name }}
+          name: test-results-${{ inputs.service }}-functional
+          path: test-results
+          if-no-files-found: ignore
+
+      - name: Publish test report
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: Functional tests (${{ inputs.service }})
+          path: test-results/*.trx
+          reporter: dotnet-trx
+          fail-on-empty: false
+          report-title: Functional tests (${{ inputs.service }})
 
       - name: Upload coverage
+        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
-          file: ${{ matrix.name }}.cobertura.xml
+          file: coverage/functional.cobertura.xml
           language: C#
-          label: code-coverage/${{ matrix.kind }}-${{ inputs.service }}-${{ matrix.name }}
+          label: code-coverage/functional-${{ inputs.service }}

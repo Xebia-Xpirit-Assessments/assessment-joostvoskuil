@@ -59,7 +59,7 @@ var tags = {
   workload: workloadName
 }
 
-resource redis 'Microsoft.Cache/redisEnterprise@2024-03-01' existing = {
+resource redis 'Microsoft.Cache/redisEnterprise@2025-04-01' existing = {
   name: redisName
 }
 
@@ -75,7 +75,7 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' existin
   name: postgresName
 }
 
-resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-03-01' existing = {
+resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' existing = {
   parent: redis
   name: 'default'
 }
