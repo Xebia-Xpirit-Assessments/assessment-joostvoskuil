@@ -17,7 +17,7 @@ Deployments use the Sweden Central Azure region (`swedencentral`) and the CAF re
 
 Each environment creates its own low-cost resources:
 
-- ACR Standard (`acr`)
+- ACR Basic (`acr`)
 - Container Apps Consumption environment (`cae`)
 - Log Analytics workspace (`log`)
 - PostgreSQL Flexible Server, Burstable `Standard_B1ms`, no high availability (`psql`)
