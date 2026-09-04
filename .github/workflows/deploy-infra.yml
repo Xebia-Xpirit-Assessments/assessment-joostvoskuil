@@ -7,9 +7,11 @@ on:
       - 'infra/bootstrap.bicep'
       - 'infra/main.bicep'
       - 'infra/modules/**'
-      - '.github/workflows/infra.yml'
+      - '.github/workflows/deploy-infra.yml'
       - '.github/workflows/deploy-infrastructure.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

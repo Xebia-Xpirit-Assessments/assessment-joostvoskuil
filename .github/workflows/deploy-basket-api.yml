@@ -20,7 +20,9 @@ on:
       - '.github/workflows/deploy-service.yml'
       - '.github/workflows/e2e-gate.yml'
       - '.github/workflows/deploy-basket-api.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
