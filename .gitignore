@@ -491,3 +491,7 @@ $RECYCLE.BIN/
 /playwright/.auth/
 /user.json
 .azure
+
+# Coverage reports
+TestResults/
+coverage*.xml

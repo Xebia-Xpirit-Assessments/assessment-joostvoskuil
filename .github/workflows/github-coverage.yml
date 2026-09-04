@@ -1,0 +1,78 @@
+name: Code Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore eShop.sln /p:NuGetAudit=false
+        shell: bash
+
+      - name: Run Ordering unit tests with coverage
+        run: >
+          dotnet test tests/Ordering.UnitTests/Ordering.UnitTests.csproj
+          --no-restore
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults/Ordering
+          /p:NuGetAudit=false
+        shell: bash
+
+      - name: Run Basket unit tests with coverage
+        run: >
+          dotnet test tests/Basket.UnitTests/Basket.UnitTests.csproj
+          --no-restore
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults/Basket
+          /p:NuGetAudit=false
+        shell: bash
+
+      - name: Merge coverage reports
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"TestResults/merged" \
+            -reporttypes:Cobertura
+        shell: bash
+
+      - name: Upload coverage artifact
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-csharp
+          path: TestResults/merged/Cobertura.xml
+
+  upload-coverage-csharp:
+    needs: test
+    if: ${{ !cancelled() && needs.test.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-csharp
+
+      - uses: actions/upload-code-coverage@v1
+        with:
+          file: Cobertura.xml
+          language: C#
+          label: code-coverage-agent
