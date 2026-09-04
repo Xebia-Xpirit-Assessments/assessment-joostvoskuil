@@ -1,0 +1,38 @@
+name: eShop - Validate infrastructure
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**/*.bicep'
+      - '.github/workflows/infra-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**/*.bicep'
+      - '.github/workflows/infra-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-bicep:
+    name: Validate Bicep templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build Bicep templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for template in infra/bootstrap.bicep infra/main.bicep infra/application.bicep; do
+            echo "Validating $template"
+            az bicep build --file "$template" --stdout > /dev/null
+          done
