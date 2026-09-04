@@ -81,7 +81,8 @@ resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' ex
 }
 
 var rabbitMqConnectionString = 'amqp://eshop:${uriComponent(rabbitMqPassword)}@${rabbitMqName}.internal.${containerAppsEnvironment.properties.defaultDomain}:5672'
-var redisConnectionString = redisDatabase.listKeys().primaryKey
+// StackExchange.Redis requires host:port plus a password= keyword, not the bare access key.
+var redisConnectionString = '${redis.properties.hostName}:${redisDatabase.properties.port},password=${redisDatabase.listKeys().primaryKey},ssl=True,abortConnect=False'
 var identityUrl = 'https://${identityName}.${containerAppsEnvironment.properties.defaultDomain}'
 var webAppUrl = 'https://${webName}.${containerAppsEnvironment.properties.defaultDomain}'
 var catalogConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=catalogdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
