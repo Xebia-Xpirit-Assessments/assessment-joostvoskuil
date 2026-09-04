@@ -1,4 +1,4 @@
-name: Deploy eShop
+name: eShop - Deploy
 
 on:
   push:

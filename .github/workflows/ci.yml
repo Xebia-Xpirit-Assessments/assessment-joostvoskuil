@@ -1,4 +1,4 @@
-name: CI
+name: eShop - Build
 
 on:
   push:
