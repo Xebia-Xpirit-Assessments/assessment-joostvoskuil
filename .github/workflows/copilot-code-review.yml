@@ -34,12 +34,3 @@ jobs:
         with:
           node-version: 20
           cache: npm
-
-      # Restore project dependencies without starting Aspire or any external services.
-      - name: Restore .NET dependencies
-        run: dotnet restore eShop.Web.slnf
-        env:
-          NUGET_XMLDOC_MODE: skip
-
-      - name: Install JavaScript dependencies
-        run: npm ci --ignore-scripts
