@@ -494,3 +494,6 @@ $RECYCLE.BIN/
 
 # Bicep compiler output; source templates live under infra/.
 /infra/*.json
+
+# Coverage reports directory
+coverage/
