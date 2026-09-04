@@ -52,6 +52,7 @@ module server 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.10.0' = {
 resource serverExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2022-12-01' = {
   name: '${name}/azure.extensions'
   properties: {
+    source: 'user-override'
     value: 'vector'
   }
   dependsOn: [
