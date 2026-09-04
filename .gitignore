@@ -491,3 +491,6 @@ $RECYCLE.BIN/
 /playwright/.auth/
 /user.json
 .azure
+
+# Bicep compiler output; source templates live under infra/.
+/infra/*.json

@@ -1,0 +1,33 @@
+name: Build and push eShop images
+description: Builds the deployable eShop service images and pushes them to an authenticated Azure Container Registry.
+
+inputs:
+  registry:
+    description: Azure Container Registry login server, for example acreshopstgweu001.azurecr.io.
+    required: true
+  image-tag:
+    description: Immutable tag to apply to every service image.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Build and push application images
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+      run: |
+        set -euo pipefail
+        declare -A images=(
+          [webapp]=src/WebApp/Dockerfile
+          [identity-api]=src/Identity.API/Dockerfile
+          [basket-api]=src/Basket.API/Dockerfile
+          [catalog-api]=src/Catalog.API/Dockerfile
+          [ordering-api]=src/Ordering.API/Dockerfile
+        )
+
+        for image in "${!images[@]}"; do
+          docker build --file "${images[$image]}" --tag "$REGISTRY/$image:$IMAGE_TAG" .
+          docker push "$REGISTRY/$image:$IMAGE_TAG"
+        done

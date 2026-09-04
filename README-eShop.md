@@ -55,6 +55,18 @@ then look for lines like this in the console output in order to find the URL to 
 Login to the dashboard at: http://localhost:19888/login?t=uniquelogincodeforyou
 ```
 
+### Using a dev container or GitHub Codespaces
+
+The dev container prepares the environment by restoring the .NET dependencies and installing the npm dependencies. It does not start the application automatically. This keeps container creation predictable and avoids starting Docker-backed services before they are needed.
+
+After the container is ready, start the application from the repository root with:
+
+```sh
+dotnet run --project src/eShop.AppHost/eShop.AppHost.csproj
+```
+
+Aspire will start the application resources and print the dashboard URL in the terminal.
+
 > You may need to install ASP.NET Core HTTPS development certificates first, and then close all browser tabs. Learn more at https://aka.ms/aspnet/https-trust-dev-cert
 
 ### Azure Open AI

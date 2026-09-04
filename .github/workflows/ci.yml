@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build and validate infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore web solution
+        run: dotnet restore eShop.Web.slnf --disable-parallel
+
+      - name: Build web solution
+        run: dotnet build eShop.Web.slnf --configuration Release --no-restore
+
+      - name: Validate Bicep
+        run: |
+          az bicep build --file infra/bootstrap.bicep --stdout > /dev/null
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: Validate Docker build contexts
+        run: |
+          test -f .dockerignore
+          for dockerfile in src/{WebApp,Identity.API,Basket.API,Catalog.API,Ordering.API}/Dockerfile; do
+            test -f "$dockerfile"
+          done
