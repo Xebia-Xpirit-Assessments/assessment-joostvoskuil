@@ -4,8 +4,7 @@ name: eShop - Purge Azure Environments
 # Do not add user-controlled resource-group inputs to this destructive workflow.
 on:
   schedule:
-    # Every night at 02:00 UTC.
-    - cron: '0 2 * * *'
+    - cron: '0 21 * * *'
   workflow_dispatch:
 
 permissions:
