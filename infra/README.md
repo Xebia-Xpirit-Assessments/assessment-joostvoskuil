@@ -1,6 +1,6 @@
 # eShop Azure deployment
 
-This folder deploys the minimal eShop shopping slice with **Bicep**, **GitHub Actions**, and the **Azure Developer CLI (`azd`)** — it does not use Azure DevOps. Shared infrastructure (ACR, the Container Apps environment, PostgreSQL, Redis, RabbitMQ) is still provisioned by `bootstrap.bicep`/`main.bicep` through raw `az deployment group` calls. The 5 application Container Apps are provisioned and deployed by `azd`, driven by the root `azure.yaml` and `infra/azd/main.bicep`. Resource modules delegate to version-pinned [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) from the public Bicep registry; the local wrappers preserve this deployment's CAF names, low-cost SKUs, and application configuration contract.
+This folder deploys the minimal eShop shopping slice with **Bicep**, **GitHub Actions**, and the **Azure Developer CLI (`azd`)** — it does not use Azure DevOps. Shared infrastructure (the resource group, ACR, the Container Apps environment, PostgreSQL, Redis, RabbitMQ) is provisioned by a single subscription-scoped `infra/main.bicep` template through one `az deployment sub create` call. The 5 application Container Apps are provisioned and deployed by `azd`, driven by the root `azure.yaml` and `infra/azd/main.bicep`. Resource modules delegate to version-pinned [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) from the public Bicep registry; the local wrappers preserve this deployment's CAF names, low-cost SKUs, and application configuration contract.
 
 ## Environments and CAF names
 
@@ -80,19 +80,16 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 
 ## Deployment flow
 
-Shared infrastructure and each application service deploy through independent workflows, every one with its own trigger and its own Staging → Production promotion. The four stages always run in this order — each stage depends on resources the previous stage created:
+Shared infrastructure and each application service deploy through independent workflows, every one with its own trigger and its own Staging → Production promotion. The three stages always run in this order — each stage depends on resources the previous stage created:
 
-1. `infra/bootstrap.bicep` (subscription scope) — creates the resource group and ACR.
-2. `infra/main.bicep` (resource-group scope) — creates the shared Container Apps environment, PostgreSQL, Redis, and RabbitMQ.
-3. `azd provision` (`azure.yaml` → `infra/azd/main.bicep`, resource-group scope) — references the resources from stage 2 as `existing` and declares/reconciles the 5 application Container Apps.
-4. `azd deploy <service>` — builds, pushes the SHA-tagged image, and patches only that one container app's revision.
+1. `infra/main.bicep` (subscription scope) — creates the resource group, ACR, the shared Container Apps environment, PostgreSQL, Redis, and RabbitMQ, all in one `az deployment sub create` call.
+2. `azd provision` (`azure.yaml` → `infra/azd/main.bicep`, resource-group scope) — references the resources from stage 1 as `existing` and declares/reconciles the 5 application Container Apps.
+3. `azd deploy <service>` — builds, pushes the SHA-tagged image, and patches only that one container app's revision.
 
 ```mermaid
 flowchart TD
     subgraph Stage1["1️⃣ deploy-shared-infrastructure.yml → template-deploy-infra.yml"]
-        A["az deployment sub create\ninfra/bootstrap.bicep\n(subscription scope)"] --> A1["Creates:\nResource Group\nContainer Registry (ACR)"]
-        A1 --> B["az deployment group create\ninfra/main.bicep\n(resource-group scope)"]
-        B --> B1["Creates:\nContainer Apps Environment + Log Analytics\nPostgreSQL Flexible Server\nRedis\nRabbitMQ Container App"]
+        A["az deployment sub create\ninfra/main.bicep\n(subscription scope)"] --> A1["Creates:\nResource Group\nContainer Registry (ACR)\nContainer Apps Environment + Log Analytics\nPostgreSQL Flexible Server\nRedis\nRabbitMQ Container App"]
     end
 
     subgraph Stage2["2️⃣ deploy-<service>.yml → template-deploy-service.yml (per service, per environment)"]
@@ -102,20 +99,20 @@ flowchart TD
         D2 --> E["azd deploy <service>\nbuild Dockerfile → push SHA-tagged image to ACR\n→ patch only that Container App's revision"]
     end
 
-    B1 -.->|"shared infra must exist first"| C
+    A1 -.->|"shared infra must exist first"| C
     E --> F["Staging: template-run-e2e-tests.yml (Playwright)"]
     F -->|"approval on protected 'production' Environment"| C2["Repeat Stage 2 for Production\n(same commit SHA, rebuilt into prod ACR)"]
 ```
 
 1. `ci.yml` runs for pull requests (and pushes) to `main`. It validates Bicep, then fans out to the reusable `template-build-service.yml` template once per service (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) to build and test only that service's project and its mapped test projects.
-2. `deploy-shared-infrastructure.yml` triggers on pushes to `infra/bootstrap.bicep`, `infra/main.bicep`, or `infra/modules/**` (or manual dispatch) and calls the reusable `template-deploy-infra.yml`, which owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.
+2. `deploy-shared-infrastructure.yml` triggers on pushes to `infra/main.bicep` or `infra/modules/**` (or manual dispatch) and calls the reusable `template-deploy-infra.yml`, which owns the resource group, ACR, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.
 3. Each service has its own top-level pipeline — `deploy-webapp.yml`, `deploy-identity-api.yml`, `deploy-basket-api.yml`, `deploy-catalog-api.yml`, `deploy-ordering-api.yml` — triggered only by pushes to that service's own source, its known shared dependencies, `azure.yaml`, `infra/azd/**`, or the shared reusable templates. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
 4. Each per-service pipeline runs `template-build-service.yml` (build + test gate), then calls the reusable `template-deploy-service.yml` for Staging, then the reusable `template-run-e2e-tests.yml` (the same authenticated Playwright suite against the deployed Staging WebApp), then `template-deploy-service.yml` again for Production. Every service uses the full commit SHA as its image tag, and `azd deploy` only ever patches that one service's container app, so deploying one service cannot delete or reset its siblings.
 5. The shared E2E gate is a hard prerequisite for that pipeline's Production promotion. Because every service's pipeline calls it independently, concurrent pushes to different services each re-verify Staging before promoting. The protected Production Environment then rebuilds the same SHA into the Production registry.
 
 Each `deploy-<service>.yml` also supports manual dispatch for that one service; there is no single "deploy all services" action. `deploy-shared-infrastructure.yml` manual dispatch always redeploys Staging then Production shared infrastructure. After a nightly purge or for first provisioning, run `deploy-shared-infrastructure.yml` first, then dispatch each of the five `deploy-<service>.yml` workflows — `template-deploy-service.yml`'s live `az containerapp show` check detects the missing container apps and lets `azd provision` recreate them from the placeholder image before `azd deploy` patches in the real one.
 
-`bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates shared resources only. `infra/azd/main.bicep` is resource-group-scoped and is owned by `azd`; it declares all 5 application Container Apps, referencing shared resources as `existing`. This prevents a Staging run from changing Production resources, and `azd deploy`'s per-service image patching prevents a service update from owning unrelated revisions.
+`main.bicep` is subscription-scoped and creates the supplied environment's resource group, ACR, and the rest of the shared resources, each nested module deployed with an explicit `scope: resourceGroup(rg.name)`. `infra/azd/main.bicep` is resource-group-scoped and is owned by `azd`; it declares all 5 application Container Apps, referencing shared resources as `existing`. This prevents a Staging run from changing Production resources, and `azd deploy`'s per-service image patching prevents a service update from owning unrelated revisions.
 
 ## Azure Verified Modules
 
@@ -128,14 +125,13 @@ The local modules in `infra/modules/` compose these AVM resource modules:
 - `avm/res/db-for-postgre-sql/flexible-server:0.10.0`
 - `avm/res/cache/redis-enterprise:0.5.1`
 
-Versions are deliberately pinned for repeatable deployments. Update a module only after reviewing its release notes, inputs, outputs, and `what-if` impact. The Container App wrapper retains its local managed-identity and `AcrPull` role-assignment resources because the identity is application-specific and the registry is created in the separate subscription-scoped bootstrap deployment.
+Versions are deliberately pinned for repeatable deployments. Update a module only after reviewing its release notes, inputs, outputs, and `what-if` impact. The Container App wrapper retains its local managed-identity and `AcrPull` role-assignment resources because the identity is application-specific and the registry is created in the same subscription-scoped `main.bicep` deployment, in a nested resource-group-scoped module.
 
 ## Local validation
 
 Compile the templates before opening a pull request:
 
 ```text
-az bicep build --file infra/bootstrap.bicep
 az bicep build --file infra/main.bicep
 az bicep build --file infra/azd/main.bicep
 ```
