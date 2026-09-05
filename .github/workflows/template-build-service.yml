@@ -72,7 +72,7 @@ jobs:
           test -f "$dockerfile"
 
   unit-tests:
-    name: Unit tests
+    name: Unit tests (${{ inputs.display-name }})
     if: ${{ contains(fromJSON('["webapp","basket-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
     permissions:
@@ -152,7 +152,7 @@ jobs:
           fail-on-error: false
 
   functional-tests:
-    name: Functional tests
+    name: Functional tests (${{ inputs.display-name }})
     if: ${{ contains(fromJSON('["catalog-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
     permissions:
