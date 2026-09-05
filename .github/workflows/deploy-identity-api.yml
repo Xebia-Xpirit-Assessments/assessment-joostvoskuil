@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ci:
+  build:
     permissions:
       contents: read
       checks: write
@@ -54,7 +54,7 @@ jobs:
       service: identity-api
 
   staging:
-    needs: ci
+    needs: build
     if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read
