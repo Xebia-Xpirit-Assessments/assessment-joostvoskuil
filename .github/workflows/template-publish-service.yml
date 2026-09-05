@@ -113,6 +113,7 @@ jobs:
           --signer-workflow "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/template-publish-service.yml"
           --cert-oidc-issuer "https://token.actions.githubusercontent.com"
           --source-digest "$GITHUB_SHA"
+          --no-public-good
 
       - name: Record signed build evidence
         shell: bash
