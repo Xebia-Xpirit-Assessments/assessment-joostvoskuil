@@ -94,6 +94,40 @@ public class OrderAggregateTest
     }
 
     [TestMethod]
+    public void Request_return_of_order_item_success()
+    {
+        //Arrange
+        var fakeOrderItem = new OrderItem(1, "FakeProductName", 12, 0, "FakeUrl", 5);
+
+        //Act
+        fakeOrderItem.RequestReturn(2);
+
+        //Assert
+        Assert.AreEqual(2, fakeOrderItem.ReturnedUnits);
+        Assert.AreEqual(3, fakeOrderItem.EligibleReturnUnits);
+    }
+
+    [TestMethod]
+    public void Request_return_of_order_item_exceeding_units_throws()
+    {
+        //Arrange
+        var fakeOrderItem = new OrderItem(1, "FakeProductName", 12, 0, "FakeUrl", 5);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => fakeOrderItem.RequestReturn(6));
+    }
+
+    [TestMethod]
+    public void Request_return_of_order_item_with_invalid_units_throws()
+    {
+        //Arrange
+        var fakeOrderItem = new OrderItem(1, "FakeProductName", 12, 0, "FakeUrl", 5);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => fakeOrderItem.RequestReturn(0));
+    }
+
+    [TestMethod]
     public void when_add_two_times_on_the_same_item_then_the_total_of_order_should_be_the_sum_of_the_two_items()
     {
         var address = new AddressBuilder().Build();
@@ -149,6 +183,143 @@ public class OrderAggregateTest
         fakeOrder.AddDomainEvent(new OrderStartedDomainEvent(fakeOrder, "fakeName", "1", cardTypeId, cardNumber, cardSecurityNumber, cardHolderName, cardExpiration));
         //Assert
         Assert.AreEqual(fakeOrder.DomainEvents.Count, expectedResult);
+    }
+
+    [TestMethod]
+    public void Request_partial_return_success()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+
+        //Act
+        order.RequestReturn(new Dictionary<int, int> { { 1, 2 } });
+
+        //Assert
+        Assert.AreEqual(OrderStatus.ReturnRequested, order.OrderStatus);
+        Assert.AreEqual(2, order.OrderItems.Single().ReturnedUnits);
+        Assert.AreEqual(3, order.OrderItems.Single().EligibleReturnUnits);
+    }
+
+    [TestMethod]
+    public void Request_full_return_success()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+        order.SetShippedStatus();
+
+        //Act
+        order.RequestReturn(new Dictionary<int, int> { { 1, 5 } });
+
+        //Assert
+        Assert.AreEqual(OrderStatus.ReturnRequested, order.OrderStatus);
+        Assert.AreEqual(5, order.OrderItems.Single().ReturnedUnits);
+        Assert.AreEqual(0, order.OrderItems.Single().EligibleReturnUnits);
+    }
+
+    [TestMethod]
+    public void Request_return_exceeding_eligible_units_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.RequestReturn(new Dictionary<int, int> { { 1, 6 } }));
+    }
+
+    [TestMethod]
+    public void Request_return_for_unknown_product_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.RequestReturn(new Dictionary<int, int> { { 999, 1 } }));
+    }
+
+    [TestMethod]
+    public void Request_return_with_no_items_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.RequestReturn(new Dictionary<int, int>()));
+    }
+
+    [TestMethod]
+    public void Request_return_on_invalid_status_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+
+        //Act - Assert (order is still in Submitted status)
+        Assert.ThrowsException<OrderingDomainException>(() => order.RequestReturn(new Dictionary<int, int> { { 1, 1 } }));
+    }
+
+    [TestMethod]
+    public void Complete_refund_after_return_requested_success()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+        order.RequestReturn(new Dictionary<int, int> { { 1, 2 } });
+
+        //Act
+        order.SetRefundedStatus();
+
+        //Assert
+        Assert.AreEqual(OrderStatus.Refunded, order.OrderStatus);
+    }
+
+    [TestMethod]
+    public void Complete_refund_without_return_requested_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.SetRefundedStatus());
     }
 
     [TestMethod]

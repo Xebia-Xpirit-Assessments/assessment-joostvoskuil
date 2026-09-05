@@ -83,6 +83,70 @@ public class OrdersWebApiTest
     }
 
     [TestMethod]
+    public async Task Request_return_with_requestId_success()
+    {
+        // Arrange
+        _mediatorMock.Send(Arg.Any<RequestOrderReturnCommand>(), default)
+            .Returns(Task.FromResult(true));
+
+        var request = new RequestOrderReturnRequest(1, new List<ReturnOrderItemRequest> { new(1, 2) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(Guid.NewGuid(), request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<Ok>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_return_bad_request_when_requestId_empty()
+    {
+        // Arrange
+        var request = new RequestOrderReturnRequest(1, new List<ReturnOrderItemRequest> { new(1, 2) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(Guid.Empty, request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<BadRequest<string>>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_return_bad_request_when_no_items_specified()
+    {
+        // Arrange
+        var request = new RequestOrderReturnRequest(1, new List<ReturnOrderItemRequest>());
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(Guid.NewGuid(), request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<BadRequest<string>>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_return_bad_request_when_domain_exception_thrown()
+    {
+        // Arrange
+#pragma warning disable NS5003
+        _mediatorMock.Send(Arg.Any<RequestOrderReturnCommand>(), default)
+            .Throws(new OrderingDomainException("You are not authorized to request a return for this order."));
+#pragma warning restore NS5003
+
+        var request = new RequestOrderReturnRequest(1, new List<ReturnOrderItemRequest> { new(1, 2) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(Guid.NewGuid(), request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<BadRequest<string>>(result.Result);
+    }
+
+    [TestMethod]
     public async Task Get_orders_success()
     {
         // Arrange
