@@ -97,6 +97,7 @@ jobs:
           azd env set ENVIRONMENT_CODE "${{ inputs.environment-code }}"
           azd env set REGION_CODE "${{ inputs.region-code }}"
           azd env set IMAGE_TAG "${{ inputs.image-tag }}"
+          azd env set AZD_SERVICE_NAME "${{ inputs.service }}"
           azd env set WEBAPP_EXISTS "$WEBAPP_EXISTS"
           azd env set IDENTITY_API_EXISTS "$IDENTITY_API_EXISTS"
           azd env set BASKET_API_EXISTS "$BASKET_API_EXISTS"

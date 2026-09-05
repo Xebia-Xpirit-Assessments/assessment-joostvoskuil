@@ -3,6 +3,7 @@ using './main.bicep'
 param location = readEnvironmentVariable('AZURE_LOCATION')
 param environment = readEnvironmentVariable('ENVIRONMENT_CODE')
 param regionCode = readEnvironmentVariable('REGION_CODE', 'swe')
+param serviceName = readEnvironmentVariable('AZD_SERVICE_NAME', 'all')
 param containerRegistryName = readEnvironmentVariable('CONTAINER_REGISTRY_NAME')
 param postgresAdministratorPassword = readEnvironmentVariable('POSTGRES_ADMINISTRATOR_PASSWORD')
 param rabbitMqPassword = readEnvironmentVariable('RABBITMQ_PASSWORD')
