@@ -29,7 +29,8 @@ public class OrderQueries(OrderingContext context)
                 ProductName = oi.ProductName,
                 Units = oi.Units,
                 UnitPrice = (double)oi.UnitPrice,
-                PictureUrl = oi.PictureUrl
+                PictureUrl = oi.PictureUrl,
+                ReturnedUnits = oi.ReturnedUnits
             }).ToList()
         };
     }

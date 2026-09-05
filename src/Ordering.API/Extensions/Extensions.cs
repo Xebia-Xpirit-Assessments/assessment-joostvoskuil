@@ -44,6 +44,7 @@
         services.AddSingleton<IValidator<CreateOrderCommand>, CreateOrderCommandValidator>();
         services.AddSingleton<IValidator<IdentifiedCommand<CreateOrderCommand, bool>>, IdentifiedCommandValidator>();
         services.AddSingleton<IValidator<ShipOrderCommand>, ShipOrderCommandValidator>();
+        services.AddSingleton<IValidator<RequestOrderReturnCommand>, RequestOrderReturnCommandValidator>();
 
         services.AddScoped<IOrderQueries, OrderQueries>();
         services.AddScoped<IBuyerRepository, BuyerRepository>();
@@ -58,5 +59,6 @@
         eventBus.AddSubscription<OrderStockRejectedIntegrationEvent, OrderStockRejectedIntegrationEventHandler>();
         eventBus.AddSubscription<OrderPaymentFailedIntegrationEvent, OrderPaymentFailedIntegrationEventHandler>();
         eventBus.AddSubscription<OrderPaymentSucceededIntegrationEvent, OrderPaymentSucceededIntegrationEventHandler>();
+        eventBus.AddSubscription<OrderRefundSucceededIntegrationEvent, OrderRefundSucceededIntegrationEventHandler>();
     }
 }

@@ -152,6 +152,52 @@ public class Order
         AddDomainEvent(new OrderCancelledDomainEvent(this));
     }
 
+    // DDD Patterns comment
+    // This method models the self-service return journey: a customer (or their delegate) requests a full or
+    // partial return of the items they purchased. Returns are only eligible once the order has been paid or
+    // shipped, and the requested quantities can never exceed what was originally purchased minus any amount
+    // already returned.
+    public void RequestReturn(IDictionary<int, int> productReturnUnits)
+    {
+        if (OrderStatus != OrderStatus.Paid && OrderStatus != OrderStatus.Shipped)
+        {
+            StatusChangeException(OrderStatus.ReturnRequested);
+        }
+
+        if (productReturnUnits is null || productReturnUnits.Count == 0)
+        {
+            throw new OrderingDomainException("At least one item must be specified to request a return.");
+        }
+
+        foreach (var (productId, units) in productReturnUnits)
+        {
+            var orderItem = _orderItems.SingleOrDefault(o => o.ProductId == productId);
+
+            if (orderItem is null)
+            {
+                throw new OrderingDomainException($"Product with id {productId} is not part of this order.");
+            }
+
+            orderItem.RequestReturn(units);
+        }
+
+        OrderStatus = OrderStatus.ReturnRequested;
+        Description = "A return was requested for one or more items in this order.";
+        AddDomainEvent(new OrderReturnRequestedDomainEvent(this));
+    }
+
+    public void SetRefundedStatus()
+    {
+        if (OrderStatus != OrderStatus.ReturnRequested)
+        {
+            StatusChangeException(OrderStatus.Refunded);
+        }
+
+        OrderStatus = OrderStatus.Refunded;
+        Description = "The returned items were refunded.";
+        AddDomainEvent(new OrderRefundedDomainEvent(this));
+    }
+
     public void SetCancelledStatusWhenStockIsRejected(IEnumerable<int> orderStockRejectedItems)
     {
         if (OrderStatus == OrderStatus.AwaitingValidation)
