@@ -2,10 +2,14 @@
 
 set -euo pipefail
 
-echo "Checking ASP.NET Core HTTPS development certificate..."
-if ! dotnet dev-certs https --check >/dev/null 2>&1; then
-	dotnet dev-certs https
-fi
+echo "Resetting ASP.NET Core HTTPS development certificate..."
+# Always clean and regenerate: a stale/corrupt cert left over from a prior
+# container session is a known cause of Aspire DCP SSL handshake failures
+# ("unexpected EOF" / "UntrustedRoot") on the internal DCP<->AppHost channel.
+# See https://github.com/dotnet/eShop/issues/530 and
+# https://github.com/dotnet/eShop/issues/777.
+dotnet dev-certs https --clean
+dotnet dev-certs https --trust || dotnet dev-certs https
 echo "ASP.NET Core HTTPS development certificate ready."
 
 echo "Removing host-generated .NET build artifacts..."

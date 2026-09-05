@@ -8,19 +8,14 @@ on:
       - 'src/EventBus/**'
       - 'src/EventBusRabbitMQ/**'
       - 'src/eShop.ServiceDefaults/**'
-      - 'infra/application.bicep'
+      - 'azure.yaml'
+      - 'infra/azd/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - 'global.json'
       - 'nuget.config'
       - '.dockerignore'
-      - '.github/actions/build-push-image/**'
-      - '.github/workflows/ci-service.yml'
-      - '.github/workflows/deploy-service.yml'
-      - '.github/workflows/e2e-gate.yml'
-      - '.github/workflows/deploy-basket-api.yml'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
   workflow_call:
 
@@ -32,22 +27,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ci:
+  build:
     permissions:
       contents: read
       checks: write
       code-quality: write
       pull-requests: read
-    uses: ./.github/workflows/ci-service.yml
+    uses: ./.github/workflows/template-build-service.yml
     with:
       service: basket-api
+      display-name: Basket API
 
   staging:
-    needs: ci
+    needs: build
+    if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-service.yml
+    uses: ./.github/workflows/template-deploy-service.yml
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
@@ -61,19 +58,22 @@ jobs:
 
   staging-e2e:
     needs: staging
+    if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/e2e-gate.yml
+      checks: write
+      pull-requests: read
+    uses: ./.github/workflows/template-run-e2e-tests.yml
     secrets: inherit
 
   production:
     needs: staging-e2e
-    if: ${{ needs.staging-e2e.result == 'success' }}
+    if: ${{ github.event_name != 'pull_request' && needs.staging-e2e.result == 'success' }}
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-service.yml
+    uses: ./.github/workflows/template-deploy-service.yml
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001

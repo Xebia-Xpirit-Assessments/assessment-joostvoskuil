@@ -1,0 +1,14 @@
+using './main.bicep'
+
+param location = readEnvironmentVariable('AZURE_LOCATION')
+param environment = readEnvironmentVariable('ENVIRONMENT_CODE')
+param regionCode = readEnvironmentVariable('REGION_CODE', 'swe')
+param serviceName = readEnvironmentVariable('AZD_SERVICE_NAME', 'all')
+param containerRegistryName = readEnvironmentVariable('CONTAINER_REGISTRY_NAME')
+param postgresAdministratorPassword = readEnvironmentVariable('POSTGRES_ADMINISTRATOR_PASSWORD')
+param rabbitMqPassword = readEnvironmentVariable('RABBITMQ_PASSWORD')
+param webappExists = bool(readEnvironmentVariable('WEBAPP_EXISTS', 'true'))
+param identityApiExists = bool(readEnvironmentVariable('IDENTITY_API_EXISTS', 'true'))
+param basketApiExists = bool(readEnvironmentVariable('BASKET_API_EXISTS', 'true'))
+param catalogApiExists = bool(readEnvironmentVariable('CATALOG_API_EXISTS', 'true'))
+param orderingApiExists = bool(readEnvironmentVariable('ORDERING_API_EXISTS', 'true'))
