@@ -82,10 +82,18 @@ jobs:
           )
           for key in "${!apps[@]}"; do
             name="${apps[$key]}"
-            if az containerapp show --name "$name" --resource-group "${{ inputs.resource-group }}" >/dev/null 2>&1; then
+            provisioning_state=$(az containerapp show \
+              --name "$name" \
+              --resource-group "${{ inputs.resource-group }}" \
+              --query properties.provisioningState \
+              --output tsv 2>/dev/null || true)
+            if [[ "$provisioning_state" == "Succeeded" ]]; then
               echo "$key=true" >> "$GITHUB_ENV"
             else
               echo "$key=false" >> "$GITHUB_ENV"
+              if [[ -n "$provisioning_state" ]]; then
+                echo "$name is in provisioning state '$provisioning_state'; azd will reconcile it without reading its failed resource body." >&2
+              fi
             fi
           done
 
