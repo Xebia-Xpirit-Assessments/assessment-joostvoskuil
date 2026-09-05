@@ -1,4 +1,4 @@
-name: _eShop - Staging E2E gate
+name: _eShop - Template for running Staging E2E gate
 
 on:
   workflow_call:
@@ -6,15 +6,19 @@ on:
 permissions:
   contents: read
   id-token: write
+  checks: write
+  pull-requests: read
 
 jobs:
   e2e:
-    name: Deployed Staging E2E gate
+    name: E2E tests
     runs-on: ubuntu-latest
     environment: staging
     permissions:
       contents: read
       id-token: write
+      checks: write
+      pull-requests: read
     steps:
       - name: Check out immutable source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +51,15 @@ jobs:
           USERNAME1: ${{ secrets.E2E_USERNAME }}
           PASSWORD: ${{ secrets.E2E_PASSWORD }}
         run: npx playwright test
+      - name: Publish test report
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: E2E tests
+          path: test-results/e2e-junit.xml
+          reporter: java-junit
+          fail-on-empty: false
+          report-title: E2E tests
       - name: Upload Playwright diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -55,6 +68,5 @@ jobs:
           path: |
             playwright-report
             test-results
-            playwright/.auth
           if-no-files-found: ignore
           retention-days: 7
