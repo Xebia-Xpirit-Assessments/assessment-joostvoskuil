@@ -2,6 +2,7 @@ param location string
 param name string
 param managedEnvironmentId string
 param containerRegistryName string
+param identityId string
 param image string
 param containerPort int = 8080
 param externalIngress bool = false
@@ -15,12 +16,6 @@ param ingressTransport string = 'auto'
 param environmentVariables array = []
 param secrets array = []
 param tags object = {}
-
-resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'id-${name}'
-  location: location
-  tags: tags
-}
 
 module app 'br/public:avm/res/app/container-app:0.23.0' = {
   params: {
@@ -46,13 +41,13 @@ module app 'br/public:avm/res/app/container-app:0.23.0' = {
     ingressTransport: ingressTransport
     managedIdentities: {
       userAssignedResourceIds: [
-        identity.id
+        identityId
       ]
     }
     registries: [
       {
         server: '${containerRegistryName}.azurecr.io'
-        identity: identity.id
+        identity: identityId
       }
     ]
     scaleSettings: {
@@ -66,4 +61,4 @@ module app 'br/public:avm/res/app/container-app:0.23.0' = {
 output name string = app.outputs.name
 output fqdn string = app.outputs.fqdn
 output id string = app.outputs.resourceId
-output identityPrincipalId string = identity.properties.principalId
+
