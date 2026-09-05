@@ -24,7 +24,7 @@ param regionCode string = 'swe'
   'catalog-api'
   'ordering-api'
 ])
-@description('The application service to provision. Use all only for shared/manual reconciliation.')
+@description('The application service to provision. Use all for a full reconciliation.')
 param serviceName string = 'all'
 
 @description('CAF instance number.')
@@ -124,7 +124,7 @@ module identity '../modules/container-app.bicep' = if (serviceName == 'all' || s
     name: identityName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: length(identityImage.outputs.containers) > 0 ? identityImage.outputs.containers[0].image : placeholderImage
+    image: identityImage.?outputs.containers[?0].?image ?? placeholderImage
     externalIngress: true
     environmentVariables: [
       {
@@ -161,7 +161,7 @@ module basket '../modules/container-app.bicep' = if (serviceName == 'all' || ser
     name: basketName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: length(basketImage.outputs.containers) > 0 ? basketImage.outputs.containers[0].image : placeholderImage
+    image: basketImage.?outputs.containers[?0].?image ?? placeholderImage
     ingressTransport: 'http2'
     environmentVariables: [
       {
@@ -206,7 +206,7 @@ module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || se
     name: catalogName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: length(catalogImage.outputs.containers) > 0 ? catalogImage.outputs.containers[0].image : placeholderImage
+    image: catalogImage.?outputs.containers[?0].?image ?? placeholderImage
     environmentVariables: [
       {
         name: 'ConnectionStrings__catalogdb'
@@ -246,7 +246,7 @@ module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || s
     name: orderingName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: length(orderingImage.outputs.containers) > 0 ? orderingImage.outputs.containers[0].image : placeholderImage
+    image: orderingImage.?outputs.containers[?0].?image ?? placeholderImage
     environmentVariables: [
       {
         name: 'ConnectionStrings__orderingdb'
@@ -290,7 +290,7 @@ module web '../modules/container-app.bicep' = if (serviceName == 'all' || servic
     name: webName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: length(webImage.outputs.containers) > 0 ? webImage.outputs.containers[0].image : placeholderImage
+    image: webImage.?outputs.containers[?0].?image ?? placeholderImage
     externalIngress: true
     environmentVariables: [
       {

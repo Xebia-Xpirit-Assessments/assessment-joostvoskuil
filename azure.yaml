@@ -17,7 +17,8 @@ services:
     docker:
       path: Dockerfile
       context: ../..
-      tag: ${CONTAINER_REGISTRY_NAME}.azurecr.io/webapp:${IMAGE_TAG}
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
   identity-api:
     project: src/Identity.API
     host: containerapp
@@ -25,7 +26,8 @@ services:
     docker:
       path: Dockerfile
       context: ../..
-      tag: ${CONTAINER_REGISTRY_NAME}.azurecr.io/identity-api:${IMAGE_TAG}
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
   basket-api:
     project: src/Basket.API
     host: containerapp
@@ -33,7 +35,8 @@ services:
     docker:
       path: Dockerfile
       context: ../..
-      tag: ${CONTAINER_REGISTRY_NAME}.azurecr.io/basket-api:${IMAGE_TAG}
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
   catalog-api:
     project: src/Catalog.API
     host: containerapp
@@ -41,7 +44,8 @@ services:
     docker:
       path: Dockerfile
       context: ../..
-      tag: ${CONTAINER_REGISTRY_NAME}.azurecr.io/catalog-api:${IMAGE_TAG}
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
   ordering-api:
     project: src/Ordering.API
     host: containerapp
@@ -49,4 +53,5 @@ services:
     docker:
       path: Dockerfile
       context: ../..
-      tag: ${CONTAINER_REGISTRY_NAME}.azurecr.io/ordering-api:${IMAGE_TAG}
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}

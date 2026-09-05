@@ -26,25 +26,25 @@ Each environment creates its own low-cost resources:
 - Public WebApp and Identity API Container Apps
 - Internal Basket, Catalog, and Ordering API Container Apps
 
-The application images use immutable full Git commit SHA tags. Staging builds and publishes images to its own registry via `azd deploy`. Production checks out the same SHA and rebuilds it into the Production registry the same way, so its deployed source is immutable and auditable without granting either environment access to the other's registry.
+The application images use immutable full Git commit SHA tags. Staging builds and publishes images to its own registry using an Azure CLI OIDC-issued ACR token. Production checks out the same SHA and rebuilds it into the Production registry the same way, so its deployed source is immutable and auditable without granting either environment access to the other's registry.
 
 ## Application Container Apps: azd
 
 `azure.yaml` declares the 5 application services (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) as `containerapp`-hosted services and points `infra.path` at `infra/azd`. `infra/azd/main.bicep` is a resource-group-scoped template that:
 
 - References the shared Container Apps environment, ACR, PostgreSQL, and Redis as `existing` resources (it never creates or modifies them).
-- Declares all 5 container apps, each tagged `azd-service-name: <service>` so `azd deploy <service>` can locate and patch the right one.
-- Uses azd's standard "exists" pattern (`infra/azd/fetch-container-image.bicep` plus a `<service>Exists` parameter) so that re-running `azd provision` never resets a container app's image back to the placeholder — it always preserves whatever image the most recent `azd deploy` set.
+- Declares all 5 container apps, each tagged `azd-service-name: <service>`, but conditionally reconciles only the service named by `AZD_SERVICE_NAME` during a per-service workflow.
+- Uses azd's standard "exists" pattern (`infra/azd/fetch-container-image.bicep` plus a `<service>Exists` parameter) so that re-running `azd provision` never resets a container app's image back to the placeholder — it always preserves whatever image the most recent deployment set.
 
 `template-deploy-service.yml` runs this flow per service, per environment:
 
 1. `azure/login` (OIDC) for plain `az` CLI calls, then install `azd` and `azd auth login --federated-credential-provider github` (also OIDC, no separate credential).
-2. Query `az containerapp show` for all 5 expected container app names to compute each `<service>Exists` flag live from the current resource group — this is intentionally **not** persisted azd environment state, since CI runners are ephemeral. It self-heals after `purge-test-environments.yml` deletes a resource group: every app is detected as not-existing and gets recreated from the placeholder image.
+2. Query `az containerapp show` for all 5 expected container app names to compute each `<service>Exists` flag live from the current resource group, and set `AZD_SERVICE_NAME` to the selected service — this is intentionally **not** persisted azd environment state, since CI runners are ephemeral. It self-heals after `purge-test-environments.yml` deletes a resource group: the selected app is detected as not-existing and gets recreated from the placeholder image.
 3. `azd env new` recreates a throwaway azd environment every run (never committed — see `.gitignore`) and `azd env set` supplies the resource group, registry, secrets, and exists flags.
-4. `azd provision` reconciles all 5 container apps' Bicep-declared configuration (env vars, secrets, ingress) — a no-op for the other 4 services' images thanks to the exists-pattern.
-5. `azd deploy <service>` builds the Dockerfile, pushes the immutable-SHA-tagged image to ACR, and patches only that container app's revision.
+4. `azd provision` reconciles the selected container app's Bicep-declared configuration (env vars, secrets, ingress).
+5. Azure CLI obtains an OIDC-backed ACR access token, then Docker builds and pushes the immutable-SHA-tagged image and `az containerapp update` patches only the selected container app's revision. This avoids the Azure Developer CLI registry token exchange, while retaining ACR admin-user disablement.
 
-Because `infra/azd/main.bicep` declares all 5 apps in one file, `azd provision` touches all 5 resource declarations on every service's pipeline run — this is a structural trade-off of azd's per-project (not per-service) provisioning model. Sibling images are protected by the exists-pattern, and `azd deploy` itself only ever touches the one target service.
+Although `infra/azd/main.bicep` contains all 5 app declarations, `AZD_SERVICE_NAME` makes each `azd provision` operation reconcile only its selected service. This prevents parallel service workflows from reusing ARM deployment names or modifying sibling app configuration.
 
 ## GitHub configuration
 
@@ -83,8 +83,8 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 Shared infrastructure and each application service deploy through independent workflows, every one with its own trigger and its own Staging → Production promotion. The three stages always run in this order — each stage depends on resources the previous stage created:
 
 1. `infra/main.bicep` (subscription scope) — creates the resource group, ACR, the shared Container Apps environment, PostgreSQL, Redis, and RabbitMQ, all in one `az deployment sub create` call.
-2. `azd provision` (`azure.yaml` → `infra/azd/main.bicep`, resource-group scope) — references the resources from stage 1 as `existing` and declares/reconciles the 5 application Container Apps.
-3. `azd deploy <service>` — builds, pushes the SHA-tagged image, and patches only that one container app's revision.
+2. `azd provision` (`azure.yaml` → `infra/azd/main.bicep`, resource-group scope) — references the resources from stage 1 as `existing` and reconciles the selected application Container App.
+3. Azure CLI obtains an OIDC-backed ACR token; Docker builds and pushes the SHA-tagged image; `az containerapp update` patches that one container app's revision.
 
 ```mermaid
 flowchart TD
@@ -95,8 +95,8 @@ flowchart TD
     subgraph Stage2["2️⃣ deploy-<service>.yml → template-deploy-service.yml (per service, per environment)"]
         C["azd env new / azd env set\n(RG, ACR name, secrets, *Exists flags)"] --> D["azd provision\nazure.yaml → infra/azd/main.bicep\n(resource-group scope)"]
         D --> D1["References as 'existing':\nContainer Apps Environment, ACR, Postgres, Redis"]
-        D --> D2["Declares/reconciles 5 Container Apps:\nwebapp, identity-api, basket-api,\ncatalog-api, ordering-api\n(placeholder image if not yet deployed)"]
-        D2 --> E["azd deploy <service>\nbuild Dockerfile → push SHA-tagged image to ACR\n→ patch only that Container App's revision"]
+        D --> D2["Reconciles selected Container App\n(placeholder image if not yet deployed)"]
+        D2 --> E["Azure CLI OIDC ACR token → Docker\nbuild and push SHA-tagged image\n→ az containerapp update"]
     end
 
     A1 -.->|"shared infra must exist first"| C
@@ -107,12 +107,12 @@ flowchart TD
 1. `ci.yml` runs for pull requests (and pushes) to `main`. It validates Bicep, then fans out to the reusable `template-build-service.yml` template once per service (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) to build and test only that service's project and its mapped test projects.
 2. `deploy-shared-infrastructure.yml` triggers on pushes to `infra/main.bicep` or `infra/modules/**` (or manual dispatch) and calls the reusable `template-deploy-infra.yml`, which owns the resource group, ACR, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.
 3. Each service has its own top-level pipeline — `deploy-webapp.yml`, `deploy-identity-api.yml`, `deploy-basket-api.yml`, `deploy-catalog-api.yml`, `deploy-ordering-api.yml` — triggered only by pushes to that service's own source, its known shared dependencies, `azure.yaml`, `infra/azd/**`, or the shared reusable templates. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
-4. Each per-service pipeline runs `template-build-service.yml` (build + test gate), then calls the reusable `template-deploy-service.yml` for Staging, then the reusable `template-run-e2e-tests.yml` (the same authenticated Playwright suite against the deployed Staging WebApp), then `template-deploy-service.yml` again for Production. Every service uses the full commit SHA as its image tag, and `azd deploy` only ever patches that one service's container app, so deploying one service cannot delete or reset its siblings.
+4. Each per-service pipeline runs `template-build-service.yml` (build + test gate), then calls the reusable `template-deploy-service.yml` for Staging, then the reusable `template-run-e2e-tests.yml` (the same authenticated Playwright suite against the deployed Staging WebApp), then `template-deploy-service.yml` again for Production. Every service uses the full commit SHA as its image tag, and Docker plus `az containerapp update` only patches that service's container app, so deploying one service cannot delete or reset its siblings.
 5. The shared E2E gate is a hard prerequisite for that pipeline's Production promotion. Because every service's pipeline calls it independently, concurrent pushes to different services each re-verify Staging before promoting. The protected Production Environment then rebuilds the same SHA into the Production registry.
 
-Each `deploy-<service>.yml` also supports manual dispatch for that one service; there is no single "deploy all services" action. `deploy-shared-infrastructure.yml` manual dispatch always redeploys Staging then Production shared infrastructure. After a nightly purge or for first provisioning, run `deploy-shared-infrastructure.yml` first, then dispatch each of the five `deploy-<service>.yml` workflows — `template-deploy-service.yml`'s live `az containerapp show` check detects the missing container apps and lets `azd provision` recreate them from the placeholder image before `azd deploy` patches in the real one.
+Each `deploy-<service>.yml` also supports manual dispatch for that one service; there is no single "deploy all services" action. `deploy-shared-infrastructure.yml` manual dispatch always redeploys Staging then Production shared infrastructure. After a nightly purge or for first provisioning, run `deploy-shared-infrastructure.yml` first, then dispatch each of the five `deploy-<service>.yml` workflows — `template-deploy-service.yml`'s live `az containerapp show` check detects the missing selected container app and lets `azd provision` recreate it from the placeholder image before the Docker-published image replaces it.
 
-`main.bicep` is subscription-scoped and creates the supplied environment's resource group, ACR, and the rest of the shared resources, each nested module deployed with an explicit `scope: resourceGroup(rg.name)`. `infra/azd/main.bicep` is resource-group-scoped and is owned by `azd`; it declares all 5 application Container Apps, referencing shared resources as `existing`. This prevents a Staging run from changing Production resources, and `azd deploy`'s per-service image patching prevents a service update from owning unrelated revisions.
+`main.bicep` is subscription-scoped and creates the supplied environment's resource group, ACR, and the rest of the shared resources, each nested module deployed with an explicit `scope: resourceGroup(rg.name)`. `infra/azd/main.bicep` is resource-group-scoped and is owned by `azd`; it declares all 5 application Container Apps, referencing shared resources as `existing`. This prevents a Staging run from changing Production resources, while service-scoped provisioning and `az containerapp update` prevent a service update from owning unrelated revisions.
 
 ## Azure Verified Modules
 
@@ -136,7 +136,7 @@ az bicep build --file infra/main.bicep
 az bicep build --file infra/azd/main.bicep
 ```
 
-`template-deploy-service.yml` runs `azd provision` (which performs its own incremental what-if-style reconciliation) before `azd deploy` builds, pushes, and patches the selected application. Never provide deployment secrets through checked-in Bicep parameter files or a committed `.azure/` folder.
+`template-deploy-service.yml` runs `azd provision` (which performs its own incremental what-if-style reconciliation) before using the Azure CLI OIDC session to obtain an ACR access token, build and push the selected image, and patch the selected Container App. Never provide deployment secrets through checked-in Bicep parameter files or a committed `.azure/` folder.
 
 ## Demo limitations
 

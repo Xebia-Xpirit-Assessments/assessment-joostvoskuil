@@ -27,6 +27,9 @@ param instance string = '001'
 @maxLength(50)
 param containerRegistryName string
 
+@description('Object ID of the GitHub Actions deployment service principal that publishes images to ACR.')
+param deploymentPrincipalId string
+
 @description('PostgreSQL administrator login.')
 param postgresAdministratorLogin string = 'eshopadmin'
 
@@ -63,6 +66,7 @@ module registry './modules/acr.bicep' = {
   params: {
     location: location
     name: containerRegistryName
+    deploymentPrincipalId: deploymentPrincipalId
     tags: tags
   }
 }
