@@ -12,8 +12,12 @@ updates:
       - "dependencies"
     groups:
       patch:
+        # Group every patch update; major and minor updates remain one PR per dependency.
+        patterns:
+          - "*"
         update-types:
           - "patch"
+
     ignore:
       # Aspire 8 is tied to the .NET 8 toolchain; upgrade the whole family deliberately.
       - dependency-name: "Aspire.*"
@@ -33,6 +37,9 @@ updates:
       - "dependencies"
     groups:
       patch:
+        # Group every patch update; major and minor updates remain one PR per dependency.
+        patterns:
+          - "*"
         update-types:
           - "patch"
 
@@ -42,9 +49,13 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
     labels:
-      - "GitHubActions"
+      - "Actions"
       - "dependencies"
     groups:
       patch:
+        # Group every patch update; major and minor updates remain one PR per dependency.
+        patterns:
+          - "*"
         update-types:
           - "patch"
+
