@@ -7,16 +7,63 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    # Cooldown only delays version updates; security-update PRs still open immediately.
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
     labels:
       - ".NET"
       - "dependencies"
     groups:
-      patch:
-        # Group every patch update; major and minor updates remain one PR per dependency.
+      # Families mirror the version properties already grouped in Directory.Packages.props,
+      # so a failing patch bump only blocks its own family, not unrelated packages.
+      aspire:
+        patterns:
+          - "Aspire.*"
+          - "Microsoft.Extensions.ServiceDiscovery*"
+        update-types:
+          - "patch"
+      aspnetcore:
+        patterns:
+          - "Microsoft.AspNetCore.*"
+          - "Microsoft.Extensions.Identity.Stores"
+          - "Asp.Versioning.*"
+        update-types:
+          - "patch"
+      efcore:
+        patterns:
+          - "Microsoft.EntityFrameworkCore.*"
+          - "Npgsql.EntityFrameworkCore.PostgreSQL"
+          - "Pgvector*"
+        update-types:
+          - "patch"
+      observability:
+        patterns:
+          - "OpenTelemetry.*"
+        update-types:
+          - "patch"
+      identity-server:
+        patterns:
+          - "Duende.IdentityServer*"
+        update-types:
+          - "patch"
+      testing:
+        patterns:
+          - "MSTest.*"
+          - "NSubstitute*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.collector"
+          - "xunit*"
+        update-types:
+          - "patch"
+      other-patch:
+        # Catch-all for patch updates not in a dedicated family group above.
         patterns:
           - "*"
         update-types:
           - "patch"
+      # No security group: each vulnerability fix must stand or fail on its own so an
+      # unrelated failing dependency never blocks a critical/high-severity fix.
 
     ignore:
       # Aspire 8 is tied to the .NET 8 toolchain; upgrade the whole family deliberately.
@@ -32,8 +79,11 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
     labels:
-      - "NPM"
+      - "npm"
       - "dependencies"
     groups:
       patch:
@@ -49,7 +99,7 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
     labels:
-      - "Actions"
+      - "actions"
       - "dependencies"
     groups:
       patch:

@@ -21,6 +21,12 @@ Identify the ecosystem and update type before editing:
 
 Check `.github/dependabot.yml` and `.github/dependency-review-config.yml` for the repository's automation and allow/deny rules.
 
+`open-pull-requests-limit` (10 per ecosystem) caps only version-update pull requests; Dependabot does not support a numeric cap on open security-update pull requests. Security updates are intentionally left **ungrouped**: each vulnerability fix opens as its own PR and stands or fails on its own CI run, so an unrelated failing dependency never blocks a critical/high-severity fix. Do not add a blanket `applies-to: security-updates` group back; it would let one failing bundled fix block every other severity merged with it.
+
+NuGet's `patch` version-update group is split into package families (`aspire`, `aspnetcore`, `efcore`, `observability`, `identity-server`, `testing`, `other-patch`) mirroring the version properties already documented in `Directory.Packages.props`, so a failing family only blocks its own PR. `cooldown` (5 days, 14 for majors) delays version updates only; it does not affect security updates.
+
+**Severity triage has no PAT/App token in this repository**, so PR-level severity labels are not available (`dependabot/fetch-metadata`'s `alert-lookup` requires a PAT or GitHub App installation token; the default `GITHUB_TOKEN` cannot be granted a Dependabot-alerts read scope). Use the repository's Security tab, filtered to `is:open severity:critical,high`, as the source of truth for triage priority before working through open Dependabot PRs.
+
 ## 2. Assess security and compatibility
 
 1. Read the advisory or Dependabot metadata and record the affected package, severity, exploitability, and fixed version.
