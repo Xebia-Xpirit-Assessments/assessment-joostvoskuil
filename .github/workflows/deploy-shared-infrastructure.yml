@@ -1,13 +1,6 @@
 name: eShop - Deploy shared infrastructure
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'infra/main.bicep'
-      - 'infra/modules/**'
-      - 'infra/azd/main.bicep'
-      - '.github/workflows/deploy-shared-infrastructure.yml'
   push:
     branches: [main]
     paths:

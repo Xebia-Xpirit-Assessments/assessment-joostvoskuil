@@ -17,27 +17,6 @@ on:
       - 'global.json'
       - 'nuget.config'
       - '.dockerignore'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'src/Catalog.API/**'
-      - 'src/EventBus/**'
-      - 'src/EventBusRabbitMQ/**'
-      - 'src/IntegrationEventLogEF/**'
-      - 'src/eShop.ServiceDefaults/**'
-      - 'azure.yaml'
-      - 'infra/azd/**'
-      - 'Directory.Build.props'
-      - 'Directory.Build.targets'
-      - 'Directory.Packages.props'
-      - 'global.json'
-      - 'nuget.config'
-      - '.dockerignore'
-      - '.github/workflows/template-build-service.yml'
-      - '.github/workflows/template-deploy-service.yml'
-      - '.github/workflows/template-run-e2e-tests.yml'
-      - '.github/workflows/deploy-catalog-api.yml'
-      - '.github/workflows/deploy-all.yml'
   workflow_dispatch:
   workflow_call:
 
@@ -49,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ci:
+  build:
     permissions:
       contents: read
       checks: write
@@ -60,7 +39,7 @@ jobs:
       service: catalog-api
 
   staging:
-    needs: ci
+    needs: build
     if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read

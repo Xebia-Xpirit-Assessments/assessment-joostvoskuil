@@ -1,0 +1,215 @@
+name: eShop - Pull request validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eshop-pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect affected components
+    runs-on: ubuntu-latest
+    outputs:
+      webapp: ${{ steps.filters.outputs.webapp }}
+      identity-api: ${{ steps.filters.outputs.identity-api }}
+      basket-api: ${{ steps.filters.outputs.basket-api }}
+      catalog-api: ${{ steps.filters.outputs.catalog-api }}
+      ordering-api: ${{ steps.filters.outputs.ordering-api }}
+      infrastructure: ${{ steps.filters.outputs.infrastructure }}
+    steps:
+      - name: Check out pull request commits
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Identify affected validation targets
+        id: filters
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          webapp=false
+          identity_api=false
+          basket_api=false
+          catalog_api=false
+          ordering_api=false
+          infrastructure=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              azure.yaml|infra/azd/*|Directory.Build.props|Directory.Build.targets|Directory.Packages.props|global.json|nuget.config|.dockerignore|src/eShop.ServiceDefaults/*|src/Shared/*|.github/actions/*|.github/workflows/*)
+                webapp=true
+                identity_api=true
+                basket_api=true
+                catalog_api=true
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/WebApp/*|src/WebAppComponents/*|tests/ClientApp.UnitTests/*)
+                webapp=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Identity.API/*)
+                identity_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Basket.API/*|tests/Basket.UnitTests/*)
+                basket_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Catalog.API/*|tests/Catalog.FunctionalTests/*)
+                catalog_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Ordering.API/*|src/Ordering.Domain/*|src/Ordering.Infrastructure/*|tests/Ordering.UnitTests/*|tests/Ordering.FunctionalTests/*)
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/EventBus/*|src/EventBusRabbitMQ/*)
+                webapp=true
+                basket_api=true
+                catalog_api=true
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/IntegrationEventLogEF/*)
+                catalog_api=true
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              infra/main.bicep|infra/modules/*|infra/azd/main.bicep)
+                infrastructure=true
+                ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+
+          {
+            echo "webapp=$webapp"
+            echo "identity-api=$identity_api"
+            echo "basket-api=$basket_api"
+            echo "catalog-api=$catalog_api"
+            echo "ordering-api=$ordering_api"
+            echo "infrastructure=$infrastructure"
+          } >> "$GITHUB_OUTPUT"
+
+  webapp:
+    needs: changes
+    if: ${{ needs.changes.outputs.webapp == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: webapp
+
+  identity-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.identity-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: identity-api
+
+  basket-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.basket-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: basket-api
+
+  catalog-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.catalog-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: catalog-api
+
+  ordering-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.ordering-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: ordering-api
+
+  infrastructure:
+    name: Validate Bicep templates
+    needs: changes
+    if: ${{ needs.changes.outputs.infrastructure == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build Bicep templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for template in infra/main.bicep infra/azd/main.bicep; do
+            echo "Validating $template"
+            az bicep build --file "$template" --stdout > /dev/null
+          done
+
+  validation:
+    name: PR validation
+    needs: [changes, webapp, identity-api, basket-api, catalog-api, ordering-api, infrastructure]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify selected validations succeeded
+        shell: bash
+        env:
+          VALIDATION_RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra results <<< "$VALIDATION_RESULTS"
+          for result in "${results[@]}"; do
+            if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
+              echo "A selected validation finished with '$result'." >&2
+              exit 1
+            fi
+          done
