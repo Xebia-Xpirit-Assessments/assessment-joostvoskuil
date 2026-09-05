@@ -17,6 +17,8 @@ updates:
           - "*"
         update-types:
           - "patch"
+        commit-message:
+          prefix: "Bump patch versions"
     ignore:
       # Aspire 8 is tied to the .NET 8 toolchain; upgrade the whole family deliberately.
       - dependency-name: "Aspire.*"
@@ -41,6 +43,8 @@ updates:
           - "*"
         update-types:
           - "patch"
+        commit-message:
+          prefix: "Bump patch versions"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -57,3 +61,5 @@ updates:
           - "*"
         update-types:
           - "patch"
+        commit-message:
+          prefix: "Bump patch versions"
