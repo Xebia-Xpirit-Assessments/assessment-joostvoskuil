@@ -80,7 +80,32 @@ The workflow uses the `staging` and `production` GitHub Environments independent
 
 ## Deployment flow
 
-Shared infrastructure and each application service deploy through independent workflows, every one with its own trigger and its own Staging → Production promotion.
+Shared infrastructure and each application service deploy through independent workflows, every one with its own trigger and its own Staging → Production promotion. The four stages always run in this order — each stage depends on resources the previous stage created:
+
+1. `infra/bootstrap.bicep` (subscription scope) — creates the resource group and ACR.
+2. `infra/main.bicep` (resource-group scope) — creates the shared Container Apps environment, PostgreSQL, Redis, and RabbitMQ.
+3. `azd provision` (`azure.yaml` → `infra/azd/main.bicep`, resource-group scope) — references the resources from stage 2 as `existing` and declares/reconciles the 5 application Container Apps.
+4. `azd deploy <service>` — builds, pushes the SHA-tagged image, and patches only that one container app's revision.
+
+```mermaid
+flowchart TD
+    subgraph Stage1["1️⃣ deploy-shared-infrastructure.yml → deploy-infra.yml"]
+        A["az deployment sub create\ninfra/bootstrap.bicep\n(subscription scope)"] --> A1["Creates:\nResource Group\nContainer Registry (ACR)"]
+        A1 --> B["az deployment group create\ninfra/main.bicep\n(resource-group scope)"]
+        B --> B1["Creates:\nContainer Apps Environment + Log Analytics\nPostgreSQL Flexible Server\nRedis\nRabbitMQ Container App"]
+    end
+
+    subgraph Stage2["2️⃣ deploy-<service>.yml → deploy-service.yml (per service, per environment)"]
+        C["azd env new / azd env set\n(RG, ACR name, secrets, *Exists flags)"] --> D["azd provision\nazure.yaml → infra/azd/main.bicep\n(resource-group scope)"]
+        D --> D1["References as 'existing':\nContainer Apps Environment, ACR, Postgres, Redis"]
+        D --> D2["Declares/reconciles 5 Container Apps:\nwebapp, identity-api, basket-api,\ncatalog-api, ordering-api\n(placeholder image if not yet deployed)"]
+        D2 --> E["azd deploy <service>\nbuild Dockerfile → push SHA-tagged image to ACR\n→ patch only that Container App's revision"]
+    end
+
+    B1 -.->|"shared infra must exist first"| C
+    E --> F["Staging: e2e-gate.yml (Playwright)"]
+    F -->|"approval on protected 'production' Environment"| C2["Repeat Stage 2 for Production\n(same commit SHA, rebuilt into prod ACR)"]
+```
 
 1. `ci.yml` runs for pull requests (and pushes) to `main`. It validates Bicep, then fans out to the reusable `ci-service.yml` template once per service (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) to build and test only that service's project and its mapped test projects.
 2. `deploy-shared-infrastructure.yml` triggers on pushes to `infra/bootstrap.bicep`, `infra/main.bicep`, or `infra/modules/**` (or manual dispatch) and calls the reusable `deploy-infra.yml`, which owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.

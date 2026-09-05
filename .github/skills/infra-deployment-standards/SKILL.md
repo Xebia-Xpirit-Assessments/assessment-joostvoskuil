@@ -19,6 +19,20 @@ Use this skill for all Azure infrastructure and deployment changes in this repos
 - Local .NET Aspire remains the local composition model; do not change `src/eShop.AppHost/Program.cs` into the Azure deployment mechanism.
 - Preserve service boundaries. Do not move application or persistence responsibilities into infrastructure code.
 
+## Deployment order
+
+The four stages run in this fixed order; each depends on resources the previous stage created. Never provision `infra/azd/main.bicep` before `main.bicep` has run — its `existing` references will fail to resolve.
+
+```mermaid
+flowchart TD
+    A["1. infra/bootstrap.bicep\n(subscription scope)\naz deployment sub create"] --> A1["Resource Group + ACR"]
+    A1 --> B["2. infra/main.bicep\n(resource-group scope)\naz deployment group create"]
+    B --> B1["Container Apps Environment, Log Analytics,\nPostgreSQL, Redis, RabbitMQ Container App"]
+    B1 --> C["3. azd provision\nazure.yaml -> infra/azd/main.bicep\n(resource-group scope)"]
+    C --> C1["References stage 2 resources as 'existing'\nDeclares/reconciles 5 Container Apps\n(placeholder image if not yet deployed)"]
+    C1 --> D["4. azd deploy <service>\nbuild -> push SHA-tagged image to ACR\n-> patch only that Container App's revision"]
+```
+
 ## Environment isolation
 
 There are two environments in the same Azure subscription:
