@@ -8,6 +8,8 @@ A reference .NET application implementing an e-commerce website using a services
 
 ## Getting Started
 
+For the developer Way of Work, begin with the [developer onboarding guide](docs/ONBOARDING.md).
+
 ### Prerequisites
 
 - Clone the eShop repository: https://github.com/dotnet/eshop

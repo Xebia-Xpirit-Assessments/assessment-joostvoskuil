@@ -4,6 +4,10 @@ Thank you for your interest in contributing to eShop! We're excited to collabora
 
 ## Getting Started
 
+Start with the [developer onboarding guide](docs/onboarding.md) for the
+repository's Way of Work, local setup, testing, status checks, dependency
+updates, security scanning, attestation, and Copilot guidance.
+
 If this is your first visit, a great way to begin is by tackling issues tagged as `"help wanted"` or `"good first issue"`. These are specially curated to help you get acquainted with the project and make a meaningful impact early on.
 
 ## Spot a Typo?
