@@ -141,3 +141,28 @@ az bicep build --file infra/azd/main.bicep
 ## Demo limitations
 
 This is a cost-optimized proof of concept, **not production-ready infrastructure**. It deliberately omits private networking, Key Vault, a managed RabbitMQ offering, high availability, zone redundancy, production IdentityServer key management, and a controlled migration job. PostgreSQL permits Azure-service access so Container Apps can reach the low-cost public endpoint; replace this with private networking before handling production data. The existing application applies database migrations at startup and uses a development signing credential—both must be replaced for a real production rollout.
+
+## Capacity tuning and health probes
+
+All application Container Apps have startup, liveness, and readiness probes. Startup and readiness use `/health`, which reports whether every registered health check passes; liveness uses `/alive`, which checks only the process self-check. The probes call the container port directly, and each request times out after five seconds. They run every ten seconds after an initial ten-second delay and treat three consecutive failures as unhealthy. RabbitMQ receives equivalent TCP probes on port `5672`.
+
+The defaults retain the low-cost demonstration profile: every app has one minimum and one maximum replica, and no scale rules. The service deployment workflow obtains the following optional values from the selected GitHub Environment's **Variables** (not secrets), so Staging and Production can be tuned independently:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `HEALTH_PROBE_PATH` | `/health` | Startup and readiness endpoint |
+| `LIVENESS_PROBE_PATH` | `/alive` | Liveness endpoint |
+| `HEALTH_PROBE_INITIAL_DELAY_SECONDS` | `10` | Delay before probes start |
+| `HEALTH_PROBE_PERIOD_SECONDS` | `10` | Probe interval |
+| `HEALTH_PROBE_TIMEOUT_SECONDS` | `5` | Per-request timeout |
+| `HEALTH_PROBE_FAILURE_THRESHOLD` | `3` | Consecutive failures before action |
+| `<SERVICE>_MIN_REPLICAS` / `<SERVICE>_MAX_REPLICAS` | `1` / `1` | Replica bounds for `WEBAPP`, `IDENTITY_API`, `BASKET_API`, `CATALOG_API`, or `ORDERING_API` |
+| `<SERVICE>_SCALE_RULES` | `[]` | JSON array of Container Apps scale rules |
+| `RABBITMQ_MIN_REPLICAS` / `RABBITMQ_MAX_REPLICAS` | `1` / `1` | RabbitMQ replica bounds |
+| `RABBITMQ_SCALE_RULES` | `[]` | JSON array of RabbitMQ scale rules |
+
+For example, set `WEBAPP_MIN_REPLICAS=2`, `WEBAPP_MAX_REPLICAS=5`, and `WEBAPP_SCALE_RULES=[{"name":"http","http":{"metadata":{"concurrentRequests":"50"}}}]` in the Production Environment to retain two ready WebApp replicas and scale for request demand. Keep the minimum at `1` in demo environments to avoid idle cost. Ensure every maximum is at least its matching minimum; deploy validation will reject invalid Azure scaling configuration.
+
+Tune one service at a time: begin with a conservative maximum, observe request rate, CPU/memory utilization, restarts, and probe failures, then increase capacity gradually. A readiness failure removes a replica from traffic while a liveness failure restarts it; do not use a dependency-sensitive endpoint for liveness. The shared `/alive` endpoint intentionally remains process-only. Set a startup threshold high enough for migrations and normal initialization before treating startup as failed.
+
+Every infrastructure pull request compiles and lints both Bicep entry points. Shared-infrastructure deployments execute `az deployment sub what-if` before applying changes. Service deployments verify the three configured probe types and smoke-test `/health` on public WebApp and Identity endpoints after deployment; internal services remain inaccessible from the public runner by design.

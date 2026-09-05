@@ -12,6 +12,12 @@ param externalIngress bool = false
   'tcp'
 ])
 param ingressTransport string = 'auto'
+@minValue(0)
+param minReplicas int = 1
+@minValue(1)
+param maxReplicas int = 1
+param scaleRules array = []
+param probes array = []
 param environmentVariables array = []
 param secrets array = []
 param tags object = {}
@@ -50,6 +56,7 @@ module app 'br/public:avm/res/app/container-app:0.23.0' = {
           memory: '0.5Gi'
         }
         env: environmentVariables
+        probes: probes
       }
     ]
     environmentResourceId: managedEnvironmentId
@@ -70,8 +77,9 @@ module app 'br/public:avm/res/app/container-app:0.23.0' = {
       }
     ]
     scaleSettings: {
-      minReplicas: 1
-      maxReplicas: 1
+      minReplicas: minReplicas
+      maxReplicas: maxReplicas
+      rules: scaleRules
     }
     secrets: secrets
   }
