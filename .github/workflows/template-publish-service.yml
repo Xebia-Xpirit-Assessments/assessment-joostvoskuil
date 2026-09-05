@@ -111,6 +111,7 @@ jobs:
           gh attestation verify "oci://${{ steps.image.outputs.reference }}"
           --repo "$GITHUB_REPOSITORY"
           --signer-workflow "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/template-publish-service.yml"
+          --cert-oidc-issuer "https://token.actions.githubusercontent.com"
           --source-digest "$GITHUB_SHA"
 
       - name: Record signed build evidence
