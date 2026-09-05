@@ -79,6 +79,7 @@ jobs:
       contents: read
       checks: write
       pull-requests: read
+      code-quality: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,7 +149,7 @@ jobs:
           file: coverage/unit.cobertura.xml
           language: C#
           label: code-coverage/unit-${{ inputs.service }}
-          fail-on-error: false
+          fail-on-error: true
 
   functional-tests:
     name: Functional tests (${{ inputs.display-name }})
@@ -158,6 +159,7 @@ jobs:
       contents: read
       checks: write
       pull-requests: read
+      code-quality: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -224,4 +226,4 @@ jobs:
           file: coverage/functional.cobertura.xml
           language: C#
           label: code-coverage/functional-${{ inputs.service }}
-          fail-on-error: false
+          fail-on-error: true

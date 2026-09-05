@@ -31,6 +31,7 @@ jobs:
       contents: read
       checks: write
       pull-requests: read
+      code-quality: write
     uses: ./.github/workflows/template-build-service.yml
     with:
       service: ordering-api
