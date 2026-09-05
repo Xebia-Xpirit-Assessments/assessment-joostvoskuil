@@ -6,17 +6,32 @@ user-invocable: true
 
 # Infrastructure deployment and Bicep standards
 
-Use this skill for all Azure infrastructure and deployment changes in this repository. The deployment platform is Azure, but the delivery platform is GitHub Actions. Do not introduce Azure DevOps pipelines or `azd` unless the requirements explicitly change.
+Use this skill for all Azure infrastructure and deployment changes in this repository. The deployment platform is Azure, and the delivery platform is GitHub Actions. Do not introduce Azure DevOps pipelines. Shared infrastructure stays on raw Bicep + `az` CLI; the 5 application Container Apps are provisioned and deployed with the Azure Developer CLI (`azd`). Do not expand `azd`'s scope to shared infrastructure, or replace GitHub Actions orchestration, unless the requirements explicitly change.
 
 ## Repository deployment model
 
 - Infrastructure is written in Bicep under `infra/`.
 - Reusable resource definitions belong under `infra/modules/`.
 - `infra/bootstrap.bicep` is subscription-scoped and may create only the selected environment's resource group and bootstrap resources.
-- `infra/main.bicep` is resource-group-scoped and deploys resources inside one environment resource group.
-- GitHub Actions owns source checkout, validation, image publication, orchestration, and deployment.
+- `infra/main.bicep` is resource-group-scoped and deploys shared resources (Container Apps environment, PostgreSQL, Redis, RabbitMQ) inside one environment resource group. Both are deployed via raw `az deployment group`/`az deployment sub` calls, not `azd`.
+- The 5 application Container Apps (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) are declared in the root `azure.yaml` and provisioned/deployed with `azd` against `infra/azd/main.bicep`. `azd` builds and pushes their Docker images natively; it never touches shared infrastructure.
+- GitHub Actions owns source checkout, validation, image publication (via `azd deploy` for application services), orchestration, and deployment.
 - Local .NET Aspire remains the local composition model; do not change `src/eShop.AppHost/Program.cs` into the Azure deployment mechanism.
 - Preserve service boundaries. Do not move application or persistence responsibilities into infrastructure code.
+
+## Deployment order
+
+The four stages run in this fixed order; each depends on resources the previous stage created. Never provision `infra/azd/main.bicep` before `main.bicep` has run — its `existing` references will fail to resolve.
+
+```mermaid
+flowchart TD
+    A["1. infra/bootstrap.bicep\n(subscription scope)\naz deployment sub create"] --> A1["Resource Group + ACR"]
+    A1 --> B["2. infra/main.bicep\n(resource-group scope)\naz deployment group create"]
+    B --> B1["Container Apps Environment, Log Analytics,\nPostgreSQL, Redis, RabbitMQ Container App"]
+    B1 --> C["3. azd provision\nazure.yaml -> infra/azd/main.bicep\n(resource-group scope)"]
+    C --> C1["References stage 2 resources as 'existing'\nDeclares/reconciles 5 Container Apps\n(placeholder image if not yet deployed)"]
+    C1 --> D["4. azd deploy <service>\nbuild -> push SHA-tagged image to ACR\n-> patch only that Container App's revision"]
+```
 
 ## Environment isolation
 
@@ -90,6 +105,7 @@ Important naming rules:
 - Do not use secure decorators on array parameters; Bicep does not support that target type.
 - Do not make secure parameters default to real values. Empty/default-free secure parameters are preferred.
 - Keep generated Bicep JSON output out of source control; compile with `--stdout` in CI where practical.
+- `infra/azd/main.bicep` is the one exception to "one allow-listed service per deployment": it is owned by `azd` and declares all 5 application Container Apps together, referencing shared resources as `existing`. Preserve its "exists" pattern (`<service>Exists` parameter + `fetch-container-image.bicep`) whenever editing it — removing it would let `azd provision` reset a sibling service's image to the placeholder.
 
 ## Required low-cost architecture
 
@@ -195,6 +211,7 @@ Before merging infrastructure or workflow changes:
 1. Compile every Bicep entry point:
    - `az bicep build --file infra/bootstrap.bicep --stdout`
    - `az bicep build --file infra/main.bicep --stdout`
+   - `az bicep build --file infra/azd/main.bicep --stdout`
 2. Resolve all errors and review warnings; do not treat a successful command as proof that the design is safe.
 3. Run Bicep linting or the available equivalent.
 4. Validate GitHub Actions YAML with `actionlint` when available.
@@ -202,7 +219,7 @@ Before merging infrastructure or workflow changes:
 6. Run `git diff --check`.
 7. Build the affected Docker images and verify the expected listening ports.
 8. Run the repository-approved .NET build and focused tests using the .NET 8 SDK.
-9. Review the deployment what-if before applying changes in Azure.
+9. Review the deployment what-if before applying shared-infrastructure changes in Azure (`az deployment group what-if`); for application Container Apps, review `azd provision`'s reconciliation output before it applies.
 10. Verify the target resource group and environment before any deployment command.
 11. After deployment, smoke-test the intended public endpoint and confirm internal-only resources have no public ingress.
 
@@ -230,6 +247,13 @@ For destructive or potentially disruptive changes:
 - [ ] Secrets use secure string/object parameters and are not committed.
 - [ ] No generated JSON or deployment artifacts are committed.
 - [ ] Bicep compiles without errors and warnings are understood.
+
+### azd (application Container Apps)
+
+- [ ] `azure.yaml` service definitions match `infra/azd/main.bicep`'s `azd-service-name` tags exactly.
+- [ ] Every container app in `infra/azd/main.bicep` keeps the exists-pattern (`<service>Exists` + `fetch-container-image.bicep`).
+- [ ] No `.azure/` folder or azd environment file is committed.
+- [ ] `azd` never provisions or modifies shared infrastructure (ACR, Container Apps environment, PostgreSQL, Redis, RabbitMQ).
 
 ### Security
 

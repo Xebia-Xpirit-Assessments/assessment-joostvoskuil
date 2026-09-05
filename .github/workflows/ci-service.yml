@@ -82,6 +82,8 @@ jobs:
 
       - name: Set up .NET and Node.js toolchain
         uses: ./.github/actions/setup-dotnet-node-toolchain
+        with:
+          restore-maui-workload: ${{ inputs.service == 'webapp' && 'true' || 'false' }}
 
       - name: Resolve unit test project
         id: project

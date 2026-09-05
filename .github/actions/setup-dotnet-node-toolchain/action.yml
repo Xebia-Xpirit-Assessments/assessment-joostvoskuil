@@ -14,6 +14,10 @@ inputs:
     description: Whether to run `dotnet restore eShop.Web.slnf`.
     required: false
     default: 'false'
+  restore-maui-workload:
+    description: Whether to restore the .NET MAUI workloads required to build the ClientApp/ClientApp.UnitTests projects.
+    required: false
+    default: 'false'
   install-npm-dependencies:
     description: Whether to run `npm ci`.
     required: false
@@ -30,6 +34,11 @@ runs:
     - name: Restore .NET Aspire workload
       shell: bash
       run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
+
+    - name: Restore .NET MAUI workloads
+      if: ${{ inputs.restore-maui-workload == 'true' }}
+      shell: bash
+      run: dotnet workload restore tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj
 
     - name: Restore web solution
       if: ${{ inputs.restore-web-solution == 'true' }}

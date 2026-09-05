@@ -7,6 +7,7 @@ param location string
   'stg'
   'prd'
 ])
+@description('CAF environment abbreviation.')
 param environment string
 
 @description('CAF workload name.')
@@ -18,29 +19,34 @@ param regionCode string = 'swe'
 @description('CAF instance number.')
 param instance string = '001'
 
-@description('Environment-specific ACR name created by bootstrap.bicep.')
+@description('The environment-specific ACR name created by bootstrap.bicep.')
 param containerRegistryName string
 
-@allowed([
-  'webapp'
-  'identity-api'
-  'basket-api'
-  'catalog-api'
-  'ordering-api'
-])
-@description('The one application service owned by this deployment.')
-param service string
-
-@description('Immutable image tag, normally the Git commit SHA.')
-param imageTag string
-
+@description('PostgreSQL administrator login.')
 param postgresAdministratorLogin string = 'eshopadmin'
 
 @secure()
+@description('PostgreSQL administrator password. Supply through the azd environment.')
 param postgresAdministratorPassword string
 
 @secure()
+@description('RabbitMQ application password. Supply through the azd environment.')
 param rabbitMqPassword string
+
+@description('Whether the WebApp container app already exists. False only for first-time provisioning.')
+param webappExists bool = true
+
+@description('Whether the Identity API container app already exists. False only for first-time provisioning.')
+param identityApiExists bool = true
+
+@description('Whether the Basket API container app already exists. False only for first-time provisioning.')
+param basketApiExists bool = true
+
+@description('Whether the Catalog API container app already exists. False only for first-time provisioning.')
+param catalogApiExists bool = true
+
+@description('Whether the Ordering API container app already exists. False only for first-time provisioning.')
+param orderingApiExists bool = true
 
 var nameSuffix = '${workloadName}-${environment}-${regionCode}-${instance}'
 var environmentName = 'cae-${nameSuffix}'
@@ -52,11 +58,14 @@ var basketName = 'ca-${workloadName}-basket-${environment}-${regionCode}-${insta
 var catalogName = 'ca-${workloadName}-catalog-${environment}-${regionCode}-${instance}'
 var orderingName = 'ca-${workloadName}-ordering-${environment}-${regionCode}-${instance}'
 var webName = 'ca-${workloadName}-web-${environment}-${regionCode}-${instance}'
+// azd's placeholder image for a container app that has never received a real 'azd deploy' yet.
+var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 var tags = {
   application: workloadName
   environment: environment
-  managedBy: 'bicep'
+  managedBy: 'azd'
   workload: workloadName
+  'azd-env-name': environment
 }
 
 resource redis 'Microsoft.Cache/redisEnterprise@2025-04-01' existing = {
@@ -81,21 +90,30 @@ resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' ex
 }
 
 var rabbitMqConnectionString = 'amqp://eshop:${uriComponent(rabbitMqPassword)}@${rabbitMqName}.internal.${containerAppsEnvironment.properties.defaultDomain}:5672'
-var redisConnectionString = redisDatabase.listKeys().primaryKey
+// StackExchange.Redis requires host:port plus a password= keyword, not the bare access key.
+var redisConnectionString = '${redis.properties.hostName}:${redisDatabase.properties.port},password=${redisDatabase.listKeys().primaryKey},ssl=True,abortConnect=False'
 var identityUrl = 'https://${identityName}.${containerAppsEnvironment.properties.defaultDomain}'
 var webAppUrl = 'https://${webName}.${containerAppsEnvironment.properties.defaultDomain}'
 var catalogConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=catalogdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var identityConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=identitydb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var orderingConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=orderingdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 
-module identity './modules/container-app.bicep' = if (service == 'identity-api') {
+module identityImage './fetch-container-image.bicep' = {
+  name: 'identity-image'
+  params: {
+    exists: identityApiExists
+    name: identityName
+  }
+}
+
+module identity '../modules/container-app.bicep' = {
   name: 'identity'
   params: {
     location: location
     name: identityName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: '${registry.properties.loginServer}/identity-api:${imageTag}'
+    image: length(identityImage.outputs.containers) > 0 ? identityImage.outputs.containers[0].image : placeholderImage
     externalIngress: true
     environmentVariables: [
       {
@@ -113,18 +131,26 @@ module identity './modules/container-app.bicep' = if (service == 'identity-api')
         value: identityConnectionString
       }
     ]
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'identity-api' })
   }
 }
 
-module basket './modules/container-app.bicep' = if (service == 'basket-api') {
+module basketImage './fetch-container-image.bicep' = {
+  name: 'basket-image'
+  params: {
+    exists: basketApiExists
+    name: basketName
+  }
+}
+
+module basket '../modules/container-app.bicep' = {
   name: 'basket'
   params: {
     location: location
     name: basketName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: '${registry.properties.loginServer}/basket-api:${imageTag}'
+    image: length(basketImage.outputs.containers) > 0 ? basketImage.outputs.containers[0].image : placeholderImage
     ingressTransport: 'http2'
     environmentVariables: [
       {
@@ -150,18 +176,26 @@ module basket './modules/container-app.bicep' = if (service == 'basket-api') {
         value: rabbitMqConnectionString
       }
     ]
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'basket-api' })
   }
 }
 
-module catalog './modules/container-app.bicep' = if (service == 'catalog-api') {
+module catalogImage './fetch-container-image.bicep' = {
+  name: 'catalog-image'
+  params: {
+    exists: catalogApiExists
+    name: catalogName
+  }
+}
+
+module catalog '../modules/container-app.bicep' = {
   name: 'catalog'
   params: {
     location: location
     name: catalogName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: '${registry.properties.loginServer}/catalog-api:${imageTag}'
+    image: length(catalogImage.outputs.containers) > 0 ? catalogImage.outputs.containers[0].image : placeholderImage
     environmentVariables: [
       {
         name: 'ConnectionStrings__catalogdb'
@@ -182,18 +216,26 @@ module catalog './modules/container-app.bicep' = if (service == 'catalog-api') {
         value: rabbitMqConnectionString
       }
     ]
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'catalog-api' })
   }
 }
 
-module ordering './modules/container-app.bicep' = if (service == 'ordering-api') {
+module orderingImage './fetch-container-image.bicep' = {
+  name: 'ordering-image'
+  params: {
+    exists: orderingApiExists
+    name: orderingName
+  }
+}
+
+module ordering '../modules/container-app.bicep' = {
   name: 'ordering'
   params: {
     location: location
     name: orderingName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: '${registry.properties.loginServer}/ordering-api:${imageTag}'
+    image: length(orderingImage.outputs.containers) > 0 ? orderingImage.outputs.containers[0].image : placeholderImage
     environmentVariables: [
       {
         name: 'ConnectionStrings__orderingdb'
@@ -218,18 +260,26 @@ module ordering './modules/container-app.bicep' = if (service == 'ordering-api')
         value: rabbitMqConnectionString
       }
     ]
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'ordering-api' })
   }
 }
 
-module web './modules/container-app.bicep' = if (service == 'webapp') {
+module webImage './fetch-container-image.bicep' = {
+  name: 'web-image'
+  params: {
+    exists: webappExists
+    name: webName
+  }
+}
+
+module web '../modules/container-app.bicep' = {
   name: 'web'
   params: {
     location: location
     name: webName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
-    image: '${registry.properties.loginServer}/webapp:${imageTag}'
+    image: length(webImage.outputs.containers) > 0 ? webImage.outputs.containers[0].image : placeholderImage
     externalIngress: true
     environmentVariables: [
       {
@@ -263,9 +313,8 @@ module web './modules/container-app.bicep' = if (service == 'webapp') {
         value: rabbitMqConnectionString
       }
     ]
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'webapp' })
   }
 }
 
-output serviceName string = service
-output containerAppName string = service == 'webapp' ? webName : service == 'identity-api' ? identityName : service == 'basket-api' ? basketName : service == 'catalog-api' ? catalogName : orderingName
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer

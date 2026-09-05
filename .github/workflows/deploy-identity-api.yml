@@ -6,14 +6,32 @@ on:
     paths:
       - 'src/Identity.API/**'
       - 'src/eShop.ServiceDefaults/**'
-      - 'infra/application.bicep'
+      - 'azure.yaml'
+      - 'infra/azd/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - 'global.json'
       - 'nuget.config'
       - '.dockerignore'
-      - '.github/actions/build-push-image/**'
+      - '.github/workflows/ci-service.yml'
+      - '.github/workflows/deploy-service.yml'
+      - '.github/workflows/e2e-gate.yml'
+      - '.github/workflows/deploy-identity-api.yml'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Identity.API/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'azure.yaml'
+      - 'infra/azd/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+      - '.dockerignore'
       - '.github/workflows/ci-service.yml'
       - '.github/workflows/deploy-service.yml'
       - '.github/workflows/e2e-gate.yml'
@@ -42,6 +60,7 @@ jobs:
 
   staging:
     needs: ci
+    if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read
       id-token: write
@@ -59,6 +78,7 @@ jobs:
 
   staging-e2e:
     needs: staging
+    if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read
       id-token: write
@@ -67,7 +87,7 @@ jobs:
 
   production:
     needs: staging-e2e
-    if: ${{ needs.staging-e2e.result == 'success' }}
+    if: ${{ github.event_name != 'pull_request' && needs.staging-e2e.result == 'success' }}
     permissions:
       contents: read
       id-token: write
