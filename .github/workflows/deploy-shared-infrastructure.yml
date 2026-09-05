@@ -7,15 +7,11 @@ on:
       - 'infra/main.bicep'
       - 'infra/modules/**'
       - 'infra/azd/main.bicep'
-      - '.github/workflows/deploy-shared-infrastructure.yml'
   push:
     branches: [main]
     paths:
       - 'infra/main.bicep'
       - 'infra/modules/**'
-      - '.github/workflows/deploy-shared-infrastructure.yml'
-      - '.github/workflows/template-deploy-infra.yml'
-      - '.github/workflows/deploy-all.yml'
   workflow_dispatch:
   workflow_call:
 
