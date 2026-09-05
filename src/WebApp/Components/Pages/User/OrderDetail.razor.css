@@ -1,0 +1,32 @@
+﻿.order-detail {
+    padding: 0 10rem;
+}
+
+.order-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.order-items th,
+.order-items td {
+    text-align: left;
+    padding: 0.5rem 1rem 0.5rem 0;
+    border-bottom: 1px solid #D2D2D2;
+}
+
+.return-success {
+    color: #2A9E01;
+}
+
+@media only screen and (max-width: 480px) {
+    .order-detail {
+        padding: 0 1rem;
+    }
+}
+
+@media only screen and (min-width: 481px) and (max-width: 1024px) {
+    .order-detail {
+        padding: 0 3rem;
+    }
+}

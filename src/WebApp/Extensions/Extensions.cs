@@ -55,6 +55,8 @@ public static class Extensions
         eventBus.AddSubscription<OrderStatusChangedToShippedIntegrationEvent, OrderStatusChangedToShippedIntegrationEventHandler>();
         eventBus.AddSubscription<OrderStatusChangedToCancelledIntegrationEvent, OrderStatusChangedToCancelledIntegrationEventHandler>();
         eventBus.AddSubscription<OrderStatusChangedToSubmittedIntegrationEvent, OrderStatusChangedToSubmittedIntegrationEventHandler>();
+        eventBus.AddSubscription<OrderStatusChangedToReturnRequestedIntegrationEvent, OrderStatusChangedToReturnRequestedIntegrationEventHandler>();
+        eventBus.AddSubscription<OrderStatusChangedToReturnedIntegrationEvent, OrderStatusChangedToReturnedIntegrationEventHandler>();
     }
 
     public static void AddAuthenticationServices(this IHostApplicationBuilder builder)

@@ -1,0 +1,155 @@
+﻿@page "/user/orders/{OrderId:int}"
+@using System.ComponentModel.DataAnnotations
+@attribute [Authorize]
+@inject OrderingService OrderingService
+@inject NavigationManager Nav
+
+<PageTitle>Order @OrderId | AdventureWorks</PageTitle>
+<SectionContent SectionName="page-header-title">Order @OrderId</SectionContent>
+<OrdersRefreshOnStatusChange />
+
+<div class="order-detail">
+@if (order is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <p><a href="user/orders">&lt; Back to orders</a></p>
+    <p>Status: <span class="status @order.Status.ToLower()">@order.Status</span></p>
+    @if (!string.IsNullOrEmpty(order.Description))
+    {
+        <p>@order.Description</p>
+    }
+    @if (!string.IsNullOrEmpty(returnSuccessMessage))
+    {
+        <p class="return-success">@returnSuccessMessage</p>
+    }
+
+    <EditForm EditContext="@editContext" FormName="return-request" OnSubmit="@HandleSubmitAsync" Enhance>
+        <table class="order-items">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Units purchased</th>
+                    <th>Units already returned</th>
+                    @if (canRequestReturn)
+                    {
+                        <th>Units to return</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (var i = 0; i < order.OrderItems.Count; i++)
+                {
+                    var item = order.OrderItems[i];
+                    var index = i;
+                    <tr>
+                        <td>@item.ProductName</td>
+                        <td>@item.Units</td>
+                        <td>@item.ReturnedUnits</td>
+                        @if (canRequestReturn)
+                        {
+                            <td>
+                                <input type="hidden" @bind-value="Info.Items[index].ProductId" />
+                                <InputNumber @bind-Value="Info.Items[index].Units" min="0" max="@item.ReturnEligibleUnits"
+                                             aria-label="@($"units to return for {item.ProductName}")" />
+                                (@item.ReturnEligibleUnits eligible)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (canRequestReturn)
+        {
+            <button class="button button-primary" type="submit">Request return / refund</button>
+        }
+        <ValidationSummary />
+    </EditForm>
+}
+</div>
+
+@code {
+    [Parameter]
+    public int OrderId { get; set; }
+
+    [SupplyParameterFromForm]
+    public ReturnRequestFormModel Info { get; set; } = default!;
+
+    private EditContext editContext = default!;
+    private ValidationMessageStore extraMessages = default!;
+    private OrderDetailRecord? order;
+    private string? returnSuccessMessage;
+
+    private bool canRequestReturn =>
+        order is not null && (order.Status == "Paid" || order.Status == "Shipped");
+
+    protected override async Task OnInitializedAsync()
+    {
+        order = await OrderingService.GetOrder(OrderId);
+
+        if (Info is null)
+        {
+            Info = new ReturnRequestFormModel
+            {
+                Items = order.OrderItems
+                    .Select(i => new ReturnItemFormModel { ProductId = i.ProductId, Units = 0 })
+                    .ToList()
+            };
+        }
+
+        editContext = new EditContext(Info);
+        extraMessages = new ValidationMessageStore(editContext);
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        extraMessages.Clear();
+        returnSuccessMessage = null;
+
+        var items = Info.Items
+            .Where(i => i.Units > 0)
+            .Select(i => new OrderItemReturnRequestRecord(i.ProductId, i.Units))
+            .ToList();
+
+        if (items.Count == 0)
+        {
+            extraMessages.Add(new FieldIdentifier(Info, ""), "Enter the number of units you'd like to return for at least one item.");
+            return;
+        }
+
+        var response = await OrderingService.RequestReturn(OrderId, items);
+        if (response.IsSuccessStatusCode)
+        {
+            order = await OrderingService.GetOrder(OrderId);
+            Info = new ReturnRequestFormModel
+            {
+                Items = order.OrderItems.Select(i => new ReturnItemFormModel { ProductId = i.ProductId, Units = 0 }).ToList()
+            };
+            editContext = new EditContext(Info);
+            extraMessages = new ValidationMessageStore(editContext);
+            returnSuccessMessage = "Your return request was submitted successfully.";
+        }
+        else
+        {
+            var errorMessage = await response.Content.ReadAsStringAsync();
+            extraMessages.Add(new FieldIdentifier(Info, ""),
+                string.IsNullOrWhiteSpace(errorMessage) ? "Unable to process the return request. Please try again later." : errorMessage);
+        }
+    }
+
+    public class ReturnRequestFormModel
+    {
+        public List<ReturnItemFormModel> Items { get; set; } = new();
+    }
+
+    public class ReturnItemFormModel
+    {
+        public int ProductId { get; set; }
+
+        [Range(0, int.MaxValue)]
+        public int Units { get; set; }
+    }
+}
