@@ -27,7 +27,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
@@ -43,16 +42,20 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      attestations: write
+      artifact-metadata: write
     uses: ./.github/workflows/template-deploy-service.yml
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
-      container-registry: acreshopstgswe001
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
       location: swedencentral
       region-code: swe
       environment-code: stg
       service: basket-api
       image-tag: ${{ github.sha }}
+      attest: true
     secrets: inherit
 
   staging-e2e:
@@ -67,7 +70,7 @@ jobs:
     secrets: inherit
 
   production:
-    needs: staging-e2e
+    needs: [staging, staging-e2e]
     if: ${{ github.event_name != 'pull_request' && needs.staging-e2e.result == 'success' }}
     concurrency:
       group: eshop-deploy-basket-api-production
@@ -79,10 +82,12 @@ jobs:
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001
-      container-registry: acreshopprdswe001
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
       location: swedencentral
       region-code: swe
       environment-code: prd
       service: basket-api
       image-tag: ${{ github.sha }}
+      source-image: ${{ needs.staging.outputs.image-reference }}
     secrets: inherit

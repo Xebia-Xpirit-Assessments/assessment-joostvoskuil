@@ -1,0 +1,68 @@
+name: eShop - Deploy shared artifact registry
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/shared-registry.bicep'
+      - 'infra/modules/acr.bicep'
+      - '.github/workflows/deploy-shared-registry.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/shared-registry.bicep'
+      - 'infra/modules/acr.bicep'
+      - '.github/workflows/deploy-shared-registry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate shared registry Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build Bicep template
+        shell: bash
+        run: az bicep build --file infra/shared-registry.bicep --stdout > /dev/null
+
+  deploy:
+    name: Deploy shared artifact registry
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: image-publisher
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: eshop-shared-artifact-registry
+      cancel-in-progress: false
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy shared resource group and registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          publisher_principal_id=$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv)
+          test -n "$publisher_principal_id"
+          az deployment sub create \
+            --name "shared-artifact-registry-${{ github.run_id }}" \
+            --location swedencentral \
+            --template-file infra/shared-registry.bicep \
+            --parameters location=swedencentral imagePublisherPrincipalId="$publisher_principal_id"
