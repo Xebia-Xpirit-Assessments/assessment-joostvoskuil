@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Azure Developer CLI (ephemeral CI environments; never persist local azd state)
+.azure/
+
 # User-specific files
 *.rsuser
 *.suo
