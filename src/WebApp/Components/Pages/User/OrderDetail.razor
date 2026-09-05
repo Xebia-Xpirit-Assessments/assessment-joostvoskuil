@@ -1,0 +1,120 @@
+﻿@page "/user/orders/{OrderNumber:int}"
+@attribute [Authorize]
+@attribute [StreamRendering]
+@inject OrderingService OrderingService
+
+<PageTitle>Order @OrderNumber | AdventureWorks</PageTitle>
+<SectionContent SectionName="page-header-title">Order @OrderNumber</SectionContent>
+<OrdersRefreshOnStatusChange />
+
+<div class="order-detail">
+@if (order is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <a href="user/orders" class="button button-secondary">
+        <img role="presentation" src="icons/arrow-left.svg" />Back to orders
+    </a>
+
+    <div class="order-summary">
+        <div>
+            <span>Status</span>
+            <span class="status @order.Status.ToLower()">@order.Status</span>
+        </div>
+        <div>
+            <span>Date</span>
+            <span>@order.Date</span>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(returnMessage))
+    {
+        <p class="return-message">@returnMessage</p>
+    }
+
+    <ul class="order-items-list">
+        <li class="order-items-header order-item-row">
+            <div>Product</div>
+            <div>Units</div>
+            <div>Eligible for return</div>
+            <div>Return</div>
+        </li>
+        @foreach (var item in order.OrderItems)
+        {
+            var returnUnits = CurrentOrPendingReturnUnits(item);
+            <li class="order-item-row" @key="@item.ProductId">
+                <div class="item-name">@item.ProductName</div>
+                <div class="item-units">@item.Units</div>
+                <div class="item-eligible">@item.EligibleReturnUnits</div>
+                <div class="item-return">
+                    @if (CanRequestReturn && item.EligibleReturnUnits > 0)
+                    {
+                        <form method="post" data-enhance>
+                            <input type="hidden" name="_handler" value="request-return" />
+                            <AntiforgeryToken />
+                            <input aria-label="return units" type="number" name="ReturnUnitsValue" value="@returnUnits" min="1" max="@item.EligibleReturnUnits" />
+                            <button type="submit"
+                                    class="button button-secondary"
+                                    name="ReturnProductId"
+                                    value="@item.ProductId">
+                                Request return
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span>-</span>
+                    }
+                </div>
+            </li>
+        }
+    </ul>
+}
+</div>
+
+<form @formname="request-return" @onsubmit="@RequestReturnAsync"></form>
+
+@code {
+    [Parameter]
+    public int OrderNumber { get; set; }
+
+    [SupplyParameterFromForm]
+    public int? ReturnProductId { get; set; }
+
+    [SupplyParameterFromForm]
+    public int? ReturnUnitsValue { get; set; }
+
+    private OrderDetailRecord? order;
+    private string? returnMessage;
+
+    private bool CanRequestReturn => order?.Status is "Paid" or "Shipped";
+
+    protected override async Task OnInitializedAsync()
+    {
+        order = await OrderingService.GetOrder(OrderNumber);
+    }
+
+    private int CurrentOrPendingReturnUnits(OrderItemRecord item)
+        => ReturnProductId.GetValueOrDefault(-1) == item.ProductId
+        ? ReturnUnitsValue.GetValueOrDefault(1)
+        : 1;
+
+    private async Task RequestReturnAsync()
+    {
+        var productId = ReturnProductId!.Value;
+        var units = ReturnUnitsValue!.Value;
+
+        var response = await OrderingService.RequestReturn(
+            OrderNumber,
+            new Dictionary<int, int> { [productId] = units },
+            Guid.NewGuid());
+
+        returnMessage = response.IsSuccessStatusCode
+            ? "Your return request has been submitted."
+            : $"Unable to request a return: {await response.Content.ReadAsStringAsync()}";
+
+        order = await OrderingService.GetOrder(OrderNumber);
+    }
+}

@@ -26,6 +26,7 @@ public class OrderQueries(OrderingContext context)
             Total = order.GetTotal(),
             OrderItems = order.OrderItems.Select(oi => new Orderitem
             {
+                ProductId = oi.ProductId,
                 ProductName = oi.ProductName,
                 Units = oi.Units,
                 UnitPrice = (double)oi.UnitPrice,
