@@ -78,6 +78,7 @@ jobs:
     permissions:
       contents: read
       checks: write
+      code-quality: write
       pull-requests: read
     steps:
       - name: Check out repository
@@ -148,6 +149,7 @@ jobs:
           file: coverage/unit.cobertura.xml
           language: C#
           label: code-coverage/unit-${{ inputs.service }}
+          fail-on-error: false
 
   functional-tests:
     name: Functional tests
@@ -156,6 +158,7 @@ jobs:
     permissions:
       contents: read
       checks: write
+      code-quality: write
       pull-requests: read
     steps:
       - name: Check out repository
@@ -223,3 +226,4 @@ jobs:
           file: coverage/functional.cobertura.xml
           language: C#
           label: code-coverage/functional-${{ inputs.service }}
+          fail-on-error: false
