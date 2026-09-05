@@ -13,7 +13,7 @@ Use this skill for all Azure infrastructure and deployment changes in this repos
 - Infrastructure is written in Bicep under `infra/`.
 - Reusable resource definitions belong under `infra/modules/`.
 - `infra/main.bicep` is subscription-scoped: it creates the selected environment's resource group and ACR, then deploys the remaining shared resources (Container Apps environment, PostgreSQL, Redis, RabbitMQ) into that resource group via nested modules with an explicit `scope: resourceGroup(rg.name)`. It is deployed with a single `az deployment sub create` call, not `azd`.
-- The 5 application Container Apps (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) are declared in the root `azure.yaml` and provisioned/deployed with `azd` against `infra/azd/main.bicep`. `azd` builds and pushes their Docker images natively; it never touches shared infrastructure.
+- The 5 application Container Apps (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) are declared in the root `azure.yaml` and provisioned with `azd` against `infra/azd/main.bicep`. The reusable deployment workflow then builds and pushes the selected Docker image and updates only that Container App's revision with `az containerapp update`; `azd` never touches shared infrastructure.
 - GitHub Actions owns source checkout, validation, image publication (via `azd deploy` for application services), orchestration, and deployment.
 - Local .NET Aspire remains the local composition model; do not change `src/eShop.AppHost/Program.cs` into the Azure deployment mechanism.
 - Preserve service boundaries. Do not move application or persistence responsibilities into infrastructure code.
@@ -27,7 +27,7 @@ flowchart TD
     A["1. infra/main.bicep\n(subscription scope)\naz deployment sub create"] --> A1["Resource Group + ACR + Container Apps Environment,\nLog Analytics, PostgreSQL, Redis, RabbitMQ Container App"]
     A1 --> C["2. azd provision\nazure.yaml -> infra/azd/main.bicep\n(resource-group scope)"]
     C --> C1["References stage 1 resources as 'existing'\nDeclares/reconciles 5 Container Apps\n(placeholder image if not yet deployed)"]
-    C1 --> D["3. azd deploy <service>\nbuild -> push SHA-tagged image to ACR\n-> patch only that Container App's revision"]
+    C1 --> D["3. Docker build + push SHA-tagged image\naz containerapp update\npatches only the selected Container App revision"]
 ```
 
 ## Environment isolation
@@ -250,6 +250,7 @@ For destructive or potentially disruptive changes:
 - [ ] Every container app in `infra/azd/main.bicep` keeps the exists-pattern (`<service>Exists` + `fetch-container-image.bicep`).
 - [ ] No `.azure/` folder or azd environment file is committed.
 - [ ] `azd` never provisions or modifies shared infrastructure (ACR, Container Apps environment, PostgreSQL, Redis, RabbitMQ).
+- [ ] The selected service is built and pushed with its immutable image tag, then updated through the repository's Container App deployment workflow.
 
 ### Security
 

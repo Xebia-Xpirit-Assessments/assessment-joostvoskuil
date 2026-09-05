@@ -126,6 +126,15 @@ Run the complete end-to-end suite only when authenticated scenarios are configur
 npx playwright test
 ```
 
+## Deployed Staging end-to-end gate
+
+The reusable Staging E2E workflow runs the same suite against the deployed WebApp rather than starting AppHost. It supplies `PLAYWRIGHT_BASE_URL` from the public Container App FQDN and authenticated test credentials through the protected `staging` GitHub Environment.
+
+- Do not configure a local AppHost when `PLAYWRIGHT_BASE_URL` is set; `playwright.config.ts` intentionally omits its `webServer` in this case.
+- Treat `E2E_USERNAME` and `E2E_PASSWORD` as GitHub Environment secrets. Never copy their values to a workflow, `.env`, test output, logs, or source control.
+- The workflow publishes JUnit output from `test-results/e2e-junit.xml` and uploads Playwright reports/traces for diagnostics. Inspect generated artifacts, but do not commit them.
+- When a deployed E2E test fails, first identify whether it is an assertion, application deployment/health issue, Azure access/configuration issue, or test-account/credential issue before changing code.
+
 Playwright generates `playwright/.auth`, `playwright-report`, and `test-results`. Inspect these outputs when diagnosing failures, but do not edit or commit them.
 
 ## Failure triage
@@ -146,6 +155,7 @@ Playwright generates `playwright/.auth`, `playwright-report`, and `test-results`
 - [ ] New tests use the existing framework and fixture style for their project.
 - [ ] Functional-test Docker requirements were checked.
 - [ ] Playwright credentials and generated auth state remain local and uncommitted.
+- [ ] Deployed Staging tests use `PLAYWRIGHT_BASE_URL` and GitHub Environment secrets, never local credentials or AppHost.
 - [ ] Environment failures were not misreported as product regressions.
 - [ ] Broader affected tests were run after the focused test passed.
 - [ ] `bin`, `obj`, Playwright reports, auth state, and test output were not edited or committed.

@@ -15,7 +15,7 @@ Organize automation into four layers:
 
 1. **Composite actions** — reusable step sequences shared by multiple jobs or workflows.
 2. **CI workflow** — validates code and runs checks for pull requests targeting `main`.
-3. **CD workflow/template** — deploys a built artifact to a GitHub Environment. The currently supported environment is `development`.
+3. **CD workflow/template** — deploys a built artifact to an explicit GitHub Environment.
 4. **Orchestration workflow** — coordinates CI and CD by calling the reusable workflows, potentially multiple times for multiple services or deployment stages.
 
 Do not duplicate repeated setup, build, test, packaging, login, or deployment steps across workflow files. Extract those steps into a composite action under `.github/actions/<action-name>/action.yml`. Use inputs and outputs for configuration and data exchange; do not hard-code service-specific values when the same action can serve multiple callers.
@@ -56,13 +56,13 @@ A CI workflow may also expose `workflow_call` when the orchestration workflow ne
 Keep CD separate from CI. Implement deployment logic as a reusable workflow/template, normally `.github/workflows/cd.yml` or a clearly named deployment template.
 
 - Accept deployment inputs through `workflow_call`, including the target service, artifact, and environment-specific settings.
-- Require an explicit environment input or constrain the workflow to the supported `development` environment.
-- Set the job's `environment: development` so GitHub Environment protection rules, secrets, and approvals apply consistently.
+- Require an explicit environment input. This repository supports `staging` and `production`; do not add a third environment without a documented requirement.
+- Set the job's `environment` from the explicit input so GitHub Environment protection rules, secrets, and approvals apply consistently.
 - Do not copy CI build logic into CD; deploy a validated artifact produced by CI or by a dedicated packaging composite action.
 - Use environment-scoped secrets and variables rather than repository-wide secrets when the value belongs to an environment.
 - Keep permissions minimal and declare them at workflow or job scope.
 
-There is currently only one deployment environment: `development`. Do not add staging or production behavior unless the repository requirements are expanded. Design the template inputs so additional environments can be introduced later without duplicating the workflow.
+Staging is the automated pre-production target and runs the deployed browser-test gate. Production promotion must use the same immutable image tag and be protected by a manual GitHub Environment approval. Keep the template generic through inputs; do not duplicate it per environment.
 
 ## Azure authentication
 
@@ -111,7 +111,8 @@ Before completing a workflow change, verify:
 - [ ] Each SHA is annotated with its intended release or commit for auditability.
 - [ ] CI is separate and triggers on pull requests targeting `main`.
 - [ ] CD is separate from CI and uses the deployment template through `workflow_call`.
-- [ ] CD targets the `development` GitHub Environment explicitly.
+- [ ] CD targets an explicit `staging` or `production` GitHub Environment.
+- [ ] Staging runs the deployed E2E gate and Production is protected by manual approval.
 - [ ] Azure authentication uses OIDC exclusively, with `id-token: write` enabled for the Azure job.
 - [ ] `SubscriptionId`, `TenantId`, and `ApplicationId` are supplied per GitHub Environment and are not hard-coded.
 - [ ] Orchestration calls CI and CD as reusable workflows and can call them multiple times.
