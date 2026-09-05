@@ -152,7 +152,7 @@ jobs:
           fail-on-error: false
 
   functional-tests:
-    name: Functional tests
+    name: Functional tests (${{ inputs.display-name }})
     if: ${{ contains(fromJSON('["catalog-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
     permissions:
