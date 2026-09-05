@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for template in infra/bootstrap.bicep infra/main.bicep infra/application.bicep; do
+          for template in infra/bootstrap.bicep infra/main.bicep infra/azd/main.bicep; do
             echo "Validating $template"
             az bicep build --file "$template" --stdout > /dev/null
           done

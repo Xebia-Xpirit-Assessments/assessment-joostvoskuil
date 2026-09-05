@@ -53,42 +53,66 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Authenticate Docker to Azure Container Registry
+      - name: Install Azure Developer CLI
         shell: bash
-        run: az acr login --name "${{ inputs.container-registry }}"
+        run: curl -fsSL https://aka.ms/install-azd.sh | bash
 
-      - name: Build and publish immutable image
-        uses: ./.github/actions/build-push-image
-        with:
-          service: ${{ inputs.service }}
-          registry: ${{ inputs.container-registry }}.azurecr.io
-          image-tag: ${{ inputs.image-tag }}
-
-      - name: Preview selected application
+      - name: Sign in to azd with OpenID Connect
         shell: bash
         run: |
-          az deployment group what-if \
-            --resource-group "${{ inputs.resource-group }}" \
-            --name "app-${{ inputs.environment }}-${{ inputs.service }}-${{ github.run_id }}" \
-            --template-file infra/application.bicep \
-            --parameters location="${{ inputs.location }}" environment="${{ inputs.environment-code }}" \
-              regionCode="${{ inputs.region-code }}" containerRegistryName="${{ inputs.container-registry }}" \
-              service="${{ inputs.service }}" imageTag="${{ inputs.image-tag }}" \
-              postgresAdministratorPassword="${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}" \
-              rabbitMqPassword="${{ secrets.RABBITMQ_PASSWORD }}"
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --federated-credential-provider github \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
 
-      - name: Deploy selected application
+      - name: Detect which container apps already exist
         shell: bash
         run: |
-          az deployment group create \
-            --resource-group "${{ inputs.resource-group }}" \
-            --name "app-${{ inputs.environment }}-${{ inputs.service }}-${{ github.run_id }}" \
-            --template-file infra/application.bicep \
-            --parameters location="${{ inputs.location }}" environment="${{ inputs.environment-code }}" \
-              regionCode="${{ inputs.region-code }}" containerRegistryName="${{ inputs.container-registry }}" \
-              service="${{ inputs.service }}" imageTag="${{ inputs.image-tag }}" \
-              postgresAdministratorPassword="${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}" \
-              rabbitMqPassword="${{ secrets.RABBITMQ_PASSWORD }}"
+          set -euo pipefail
+          declare -A apps=(
+            [WEBAPP_EXISTS]="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [IDENTITY_API_EXISTS]="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [BASKET_API_EXISTS]="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [CATALOG_API_EXISTS]="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [ORDERING_API_EXISTS]="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+          )
+          for key in "${!apps[@]}"; do
+            name="${apps[$key]}"
+            if az containerapp show --name "$name" --resource-group "${{ inputs.resource-group }}" >/dev/null 2>&1; then
+              echo "$key=true" >> "$GITHUB_ENV"
+            else
+              echo "$key=false" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Create ephemeral azd environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          azd env new "eshop-${{ inputs.environment-code }}" --no-prompt
+          azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          azd env set AZURE_LOCATION "${{ inputs.location }}"
+          azd env set AZURE_RESOURCE_GROUP "${{ inputs.resource-group }}"
+          azd env set CONTAINER_REGISTRY_NAME "${{ inputs.container-registry }}"
+          azd env set ENVIRONMENT_CODE "${{ inputs.environment-code }}"
+          azd env set REGION_CODE "${{ inputs.region-code }}"
+          azd env set IMAGE_TAG "${{ inputs.image-tag }}"
+          azd env set WEBAPP_EXISTS "$WEBAPP_EXISTS"
+          azd env set IDENTITY_API_EXISTS "$IDENTITY_API_EXISTS"
+          azd env set BASKET_API_EXISTS "$BASKET_API_EXISTS"
+          azd env set CATALOG_API_EXISTS "$CATALOG_API_EXISTS"
+          azd env set ORDERING_API_EXISTS "$ORDERING_API_EXISTS"
+          # Ephemeral, never-committed azd environment; plain env values are fine, nothing persists past this job.
+          azd env set POSTGRES_ADMINISTRATOR_PASSWORD "${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}"
+          azd env set RABBITMQ_PASSWORD "${{ secrets.RABBITMQ_PASSWORD }}"
+
+      - name: Provision container apps with azd
+        shell: bash
+        run: azd provision --no-prompt
+
+      - name: Build, push, and deploy selected application with azd
+        shell: bash
+        run: azd deploy "${{ inputs.service }}" --no-prompt
 
       - name: Verify latest revision
         shell: bash
