@@ -91,6 +91,25 @@ module redis './modules/redis.bicep' = {
   }
 }
 
+module rabbitMqIdentity './modules/container-app-identity.bicep' = {
+  name: 'rabbitMqIdentity'
+  scope: resourceGroup(rg.name)
+  params: {
+    location: location
+    name: rabbitMqName
+    tags: tags
+  }
+}
+
+module rabbitMqAcrPull './modules/acr-pull-assignment.bicep' = {
+  name: 'rabbitmqAcrPull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: rabbitMqIdentity.outputs.principalId
+  }
+}
+
 module rabbitMq './modules/container-app.bicep' = {
   name: 'rabbitMq'
   scope: resourceGroup(rg.name)
@@ -99,6 +118,7 @@ module rabbitMq './modules/container-app.bicep' = {
     name: rabbitMqName
     managedEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: containerRegistryName
+    identityId: rabbitMqIdentity.outputs.id
     image: 'rabbitmq:3.13-management'
     containerPort: 5672
     ingressTransport: 'tcp'
@@ -120,16 +140,11 @@ module rabbitMq './modules/container-app.bicep' = {
     ]
     tags: tags
   }
+  dependsOn: [
+    rabbitMqAcrPull
+  ]
 }
 
-module rabbitMqAcrPull './modules/acr-pull-assignment.bicep' = {
-  name: 'rabbitmqAcrPull'
-  scope: resourceGroup(containerRegistryResourceGroupName)
-  params: {
-    containerRegistryName: containerRegistryName
-    principalId: rabbitMq.outputs.identityPrincipalId
-  }
-}
 output resourceGroupName string = rg.name
 output containerAppsEnvironmentName string = environmentName
 output containerRegistryName string = containerRegistryName
