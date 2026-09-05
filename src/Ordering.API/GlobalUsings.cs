@@ -16,6 +16,7 @@ global using eShop.IntegrationEventLogEF.Services;
 global using eShop.Ordering.API;
 global using eShop.Ordering.API.Application.Behaviors;
 global using eShop.Ordering.API.Application.Commands;
+global using eShop.Ordering.API.Application.Exceptions;
 global using eShop.Ordering.API.Application.IntegrationEvents;
 global using eShop.Ordering.API.Application.IntegrationEvents.EventHandling;
 global using eShop.Ordering.API.Application.IntegrationEvents.Events;

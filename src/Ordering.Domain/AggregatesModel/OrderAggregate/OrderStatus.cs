@@ -10,5 +10,7 @@ public enum OrderStatus
     StockConfirmed = 3,
     Paid = 4,
     Shipped = 5,
-    Cancelled = 6
+    Cancelled = 6,
+    ReturnRequested = 7,
+    Returned = 8
 }

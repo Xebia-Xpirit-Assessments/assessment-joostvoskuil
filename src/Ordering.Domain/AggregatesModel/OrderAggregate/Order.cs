@@ -152,6 +152,52 @@ public class Order
         AddDomainEvent(new OrderCancelledDomainEvent(this));
     }
 
+    // DDD Patterns comment
+    // Customers can request a full or partial return/refund for their own paid or shipped orders.
+    // Returned quantities can never exceed the eligible purchased quantity for a given product.
+    public void RequestReturn(IEnumerable<OrderItemReturnRequest> itemsToReturn)
+    {
+        if (OrderStatus != OrderStatus.Paid && OrderStatus != OrderStatus.Shipped)
+        {
+            StatusChangeException(OrderStatus.ReturnRequested);
+        }
+
+        var returnRequests = itemsToReturn?.ToList();
+
+        if (returnRequests is null || returnRequests.Count == 0)
+        {
+            throw new OrderingDomainException("At least one item must be specified to request a return.");
+        }
+
+        foreach (var itemToReturn in returnRequests)
+        {
+            var orderItem = _orderItems.SingleOrDefault(oi => oi.ProductId == itemToReturn.ProductId);
+
+            if (orderItem is null)
+            {
+                throw new OrderingDomainException($"Product {itemToReturn.ProductId} does not belong to this order.");
+            }
+
+            orderItem.RequestReturn(itemToReturn.Units);
+        }
+
+        OrderStatus = OrderStatus.ReturnRequested;
+        Description = "The customer requested a return/refund for one or more items.";
+        AddDomainEvent(new OrderStatusChangedToReturnRequestedDomainEvent(this));
+    }
+
+    public void SetReturnedStatus()
+    {
+        if (OrderStatus != OrderStatus.ReturnRequested)
+        {
+            StatusChangeException(OrderStatus.Returned);
+        }
+
+        OrderStatus = OrderStatus.Returned;
+        Description = "The return was processed and the refund was completed.";
+        AddDomainEvent(new OrderReturnedDomainEvent(this));
+    }
+
     public void SetCancelledStatusWhenStockIsRejected(IEnumerable<int> orderStockRejectedItems)
     {
         if (OrderStatus == OrderStatus.AwaitingValidation)

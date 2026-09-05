@@ -175,4 +175,123 @@ public class OrderAggregateTest
         //Assert
         Assert.AreEqual(fakeOrder.DomainEvents.Count, expectedResult);
     }
+
+    private static Order CreatePaidOrder(int units = 5)
+    {
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units)
+            .Build();
+
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+
+        return order;
+    }
+
+    [TestMethod]
+    public void Request_partial_return_reduces_eligible_units_and_sets_status()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+
+        //Act
+        order.RequestReturn(new[] { new OrderItemReturnRequest(1, 2) });
+
+        //Assert
+        Assert.AreEqual(OrderStatus.ReturnRequested, order.OrderStatus);
+        Assert.AreEqual(2, order.OrderItems.Single().ReturnedUnits);
+        Assert.AreEqual(3, order.OrderItems.Single().ReturnEligibleUnits);
+    }
+
+    [TestMethod]
+    public void Request_full_return_returns_all_units()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+
+        //Act
+        order.RequestReturn(new[] { new OrderItemReturnRequest(1, 5) });
+
+        //Assert
+        Assert.AreEqual(OrderStatus.ReturnRequested, order.OrderStatus);
+        Assert.AreEqual(0, order.OrderItems.Single().ReturnEligibleUnits);
+    }
+
+    [TestMethod]
+    public void Request_return_exceeding_purchased_units_is_rejected()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(
+            () => order.RequestReturn(new[] { new OrderItemReturnRequest(1, 6) }));
+        Assert.AreEqual(OrderStatus.Paid, order.OrderStatus);
+    }
+
+    [TestMethod]
+    public void Request_return_for_product_not_in_order_is_rejected()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(
+            () => order.RequestReturn(new[] { new OrderItemReturnRequest(999, 1) }));
+    }
+
+    [TestMethod]
+    public void Request_return_on_a_submitted_order_is_an_invalid_transition()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, 5)
+            .Build();
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(
+            () => order.RequestReturn(new[] { new OrderItemReturnRequest(1, 1) }));
+        Assert.AreEqual(OrderStatus.Submitted, order.OrderStatus);
+    }
+
+    [TestMethod]
+    public void Second_return_request_can_only_use_remaining_eligible_units()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+        order.RequestReturn(new[] { new OrderItemReturnRequest(1, 3) });
+        order.SetReturnedStatus();
+
+        //Act - Assert
+        // Order is no longer Paid/Shipped after a return completed, so requesting again is invalid.
+        Assert.ThrowsException<OrderingDomainException>(
+            () => order.RequestReturn(new[] { new OrderItemReturnRequest(1, 1) }));
+    }
+
+    [TestMethod]
+    public void Set_returned_status_completes_the_return()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+        order.RequestReturn(new[] { new OrderItemReturnRequest(1, 2) });
+
+        //Act
+        order.SetReturnedStatus();
+
+        //Assert
+        Assert.AreEqual(OrderStatus.Returned, order.OrderStatus);
+    }
+
+    [TestMethod]
+    public void Set_returned_status_without_a_pending_return_request_is_rejected()
+    {
+        //Arrange
+        var order = CreatePaidOrder(units: 5);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.SetReturnedStatus());
+    }
 }

@@ -26,10 +26,12 @@ public class OrderQueries(OrderingContext context)
             Total = order.GetTotal(),
             OrderItems = order.OrderItems.Select(oi => new Orderitem
             {
+                ProductId = oi.ProductId,
                 ProductName = oi.ProductName,
                 Units = oi.Units,
                 UnitPrice = (double)oi.UnitPrice,
-                PictureUrl = oi.PictureUrl
+                PictureUrl = oi.PictureUrl,
+                ReturnedUnits = oi.ReturnedUnits
             }).ToList()
         };
     }

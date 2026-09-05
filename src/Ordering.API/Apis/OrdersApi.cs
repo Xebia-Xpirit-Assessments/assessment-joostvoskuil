@@ -10,6 +10,7 @@ public static class OrdersApi
 
         api.MapPut("/cancel", CancelOrderAsync);
         api.MapPut("/ship", ShipOrderAsync);
+        api.MapPost("/{orderId:int}/return", RequestOrderReturnAsync);
         api.MapGet("{orderId:int}", GetOrderAsync);
         api.MapGet("/", GetOrdersByUserAsync);
         api.MapGet("/cardtypes", GetCardTypesAsync);
@@ -75,6 +76,47 @@ public static class OrdersApi
         }
 
         return TypedResults.Ok();
+    }
+
+    public static async Task<Results<Ok, BadRequest<string>, ForbidHttpResult, NotFound<string>, ProblemHttpResult>> RequestOrderReturnAsync(
+        int orderId,
+        OrderReturnRequest request,
+        [AsParameters] OrderServices services)
+    {
+        var userId = services.IdentityService.GetUserIdentity();
+
+        var command = new RequestOrderReturnCommand(orderId, userId, request.Items);
+
+        services.Logger.LogInformation(
+            "Sending command: {CommandName} - {IdProperty}: {CommandId} ({@Command})",
+            command.GetGenericTypeName(),
+            nameof(command.OrderNumber),
+            command.OrderNumber,
+            command);
+
+        try
+        {
+            var commandResult = await services.Mediator.Send(command);
+
+            if (!commandResult)
+            {
+                return TypedResults.Problem(detail: "Request return failed to process.", statusCode: 500);
+            }
+
+            return TypedResults.Ok();
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound($"Order {orderId} was not found.");
+        }
+        catch (OrderReturnNotAuthorizedException)
+        {
+            return TypedResults.Forbid();
+        }
+        catch (OrderingDomainException ex)
+        {
+            return TypedResults.BadRequest(ex.Message);
+        }
     }
 
     public static async Task<Results<Ok<Order>, NotFound>> GetOrderAsync(int orderId, [AsParameters] OrderServices services)
@@ -183,3 +225,5 @@ public record CreateOrderRequest(
     int CardTypeId,
     string Buyer,
     List<BasketItem> Items);
+
+public record OrderReturnRequest(List<OrderItemReturnRequest> Items);

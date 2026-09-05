@@ -153,4 +153,82 @@ public class OrdersWebApiTest
         Assert.IsInstanceOfType<Ok<IEnumerable<CardType>>>(result);
         Assert.AreSame(fakeDynamicResult, result.Value);
     }
+
+    [TestMethod]
+    public async Task Request_order_return_success()
+    {
+        // Arrange
+        _identityServiceMock.GetUserIdentity().Returns("buyer-1");
+        _mediatorMock.Send(Arg.Any<RequestOrderReturnCommand>(), default)
+            .Returns(Task.FromResult(true));
+
+        var request = new OrderReturnRequest(new List<OrderItemReturnRequest> { new(1, 2) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(123, request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<Ok>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_order_return_not_owned_by_user_is_forbidden()
+    {
+        // Arrange
+        _identityServiceMock.GetUserIdentity().Returns("buyer-1");
+#pragma warning disable NS5003
+        _mediatorMock.Send(Arg.Any<RequestOrderReturnCommand>(), default)
+            .Throws(new OrderReturnNotAuthorizedException("not authorized"));
+#pragma warning restore NS5003
+
+        var request = new OrderReturnRequest(new List<OrderItemReturnRequest> { new(1, 2) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(123, request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<ForbidHttpResult>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_order_return_for_missing_order_is_not_found()
+    {
+        // Arrange
+        _identityServiceMock.GetUserIdentity().Returns("buyer-1");
+#pragma warning disable NS5003
+        _mediatorMock.Send(Arg.Any<RequestOrderReturnCommand>(), default)
+            .Throws(new KeyNotFoundException());
+#pragma warning restore NS5003
+
+        var request = new OrderReturnRequest(new List<OrderItemReturnRequest> { new(1, 2) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(123, request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<NotFound<string>>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_order_return_with_invalid_quantity_is_bad_request()
+    {
+        // Arrange
+        _identityServiceMock.GetUserIdentity().Returns("buyer-1");
+#pragma warning disable NS5003
+        _mediatorMock.Send(Arg.Any<RequestOrderReturnCommand>(), default)
+            .Throws(new OrderingDomainException("Cannot return more units than were purchased."));
+#pragma warning restore NS5003
+
+        var request = new OrderReturnRequest(new List<OrderItemReturnRequest> { new(1, 100) });
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(123, request, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<BadRequest<string>>(result.Result);
+    }
 }
