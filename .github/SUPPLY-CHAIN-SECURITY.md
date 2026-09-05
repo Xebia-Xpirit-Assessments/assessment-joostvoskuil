@@ -21,13 +21,12 @@ Authorized operators can verify provenance for an authenticated ACR image with G
 ```text
 gh attestation verify oci://<registry>/<repository>@sha256:<digest> \
   --repo Xebia-Xpirit-Assessments/assessment-joostvoskuil \
-  --signer-workflow https://github.com/Xebia-Xpirit-Assessments/assessment-joostvoskuil/.github/workflows/template-publish-service.yml \
+  --signer-workflow github.com/Xebia-Xpirit-Assessments/assessment-joostvoskuil/.github/workflows/template-publish-service.yml \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
-  --source-digest <commit-sha> \
-  --no-public-good
+  --source-digest <commit-sha>
 ```
 
-This repository is private, so GitHub signs attestations with its private Sigstore instance rather than the public-good `sigstore.dev` instance. `--no-public-good` skips the public-good verification path that otherwise fails with `verifying with issuer "sigstore.dev"` for a private repository's attestations.
+`--signer-workflow` takes `[host/]<owner>/<repo>/<path>/<to>/<workflow>` — no `https://` scheme. This repository's attestations are signed with the Sigstore public-good instance; do not add `--no-public-good`.
 
 Evidence consists of the pull request and review, required-check results, protected Environment approval, immutable image digest, GitHub attestation URLs, SBOM, retained `signed-build-evidence-*` Actions artifact, and Azure deployment logs. Keep these records according to the organization's approved retention schedule; the 365-day workflow artifact retention is the repository baseline.
 
