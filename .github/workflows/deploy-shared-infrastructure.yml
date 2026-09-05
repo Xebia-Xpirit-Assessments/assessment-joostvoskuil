@@ -1,6 +1,14 @@
 name: eShop - Deploy shared infrastructure
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/bootstrap.bicep'
+      - 'infra/main.bicep'
+      - 'infra/modules/**'
+      - 'infra/azd/main.bicep'
+      - '.github/workflows/deploy-shared-infrastructure.yml'
   push:
     branches: [main]
     paths:
@@ -8,8 +16,8 @@ on:
       - 'infra/main.bicep'
       - 'infra/modules/**'
       - '.github/workflows/deploy-shared-infrastructure.yml'
-      - '.github/workflows/deploy-infra.yml'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/template-deploy-infra.yml'
+      - '.github/workflows/deploy-all.yml'
   workflow_dispatch:
   workflow_call:
 
@@ -17,15 +25,34 @@ permissions:
   contents: read
 
 concurrency:
-  group: eshop-infrastructure
-  cancel-in-progress: false
+  # PR validation runs are per-PR and cancellable; deploy runs stay serialized and never cancelled.
+  group: eshop-infrastructure-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  validate-bicep:
+    name: Validate Bicep templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build Bicep templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for template in infra/bootstrap.bicep infra/main.bicep infra/azd/main.bicep; do
+            echo "Validating $template"
+            az bicep build --file "$template" --stdout > /dev/null
+          done
+
   staging-infrastructure:
+    needs: validate-bicep
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-infra.yml
+    uses: ./.github/workflows/template-deploy-infra.yml
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
@@ -37,11 +64,11 @@ jobs:
 
   production-infrastructure:
     needs: staging-infrastructure
-    if: ${{ needs.staging-infrastructure.result == 'success' }}
+    if: ${{ github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-infra.yml
+    uses: ./.github/workflows/template-deploy-infra.yml
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001

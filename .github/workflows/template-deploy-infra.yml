@@ -1,4 +1,4 @@
-name: _eShop - Deploy shared infrastructure
+name: _eShop - Template for deploying shared infrastructure
 
 on:
   workflow_call:

@@ -36,7 +36,7 @@ The application images use immutable full Git commit SHA tags. Staging builds an
 - Declares all 5 container apps, each tagged `azd-service-name: <service>` so `azd deploy <service>` can locate and patch the right one.
 - Uses azd's standard "exists" pattern (`infra/azd/fetch-container-image.bicep` plus a `<service>Exists` parameter) so that re-running `azd provision` never resets a container app's image back to the placeholder — it always preserves whatever image the most recent `azd deploy` set.
 
-`deploy-service.yml` runs this flow per service, per environment:
+`template-deploy-service.yml` runs this flow per service, per environment:
 
 1. `azure/login` (OIDC) for plain `az` CLI calls, then install `azd` and `azd auth login --federated-credential-provider github` (also OIDC, no separate credential).
 2. Query `az containerapp show` for all 5 expected container app names to compute each `<service>Exists` flag live from the current resource group — this is intentionally **not** persisted azd environment state, since CI runners are ephemeral. It self-heals after `purge-test-environments.yml` deletes a resource group: every app is detected as not-existing and gets recreated from the placeholder image.
@@ -89,13 +89,13 @@ Shared infrastructure and each application service deploy through independent wo
 
 ```mermaid
 flowchart TD
-    subgraph Stage1["1️⃣ deploy-shared-infrastructure.yml → deploy-infra.yml"]
+    subgraph Stage1["1️⃣ deploy-shared-infrastructure.yml → template-deploy-infra.yml"]
         A["az deployment sub create\ninfra/bootstrap.bicep\n(subscription scope)"] --> A1["Creates:\nResource Group\nContainer Registry (ACR)"]
         A1 --> B["az deployment group create\ninfra/main.bicep\n(resource-group scope)"]
         B --> B1["Creates:\nContainer Apps Environment + Log Analytics\nPostgreSQL Flexible Server\nRedis\nRabbitMQ Container App"]
     end
 
-    subgraph Stage2["2️⃣ deploy-<service>.yml → deploy-service.yml (per service, per environment)"]
+    subgraph Stage2["2️⃣ deploy-<service>.yml → template-deploy-service.yml (per service, per environment)"]
         C["azd env new / azd env set\n(RG, ACR name, secrets, *Exists flags)"] --> D["azd provision\nazure.yaml → infra/azd/main.bicep\n(resource-group scope)"]
         D --> D1["References as 'existing':\nContainer Apps Environment, ACR, Postgres, Redis"]
         D --> D2["Declares/reconciles 5 Container Apps:\nwebapp, identity-api, basket-api,\ncatalog-api, ordering-api\n(placeholder image if not yet deployed)"]
@@ -103,17 +103,17 @@ flowchart TD
     end
 
     B1 -.->|"shared infra must exist first"| C
-    E --> F["Staging: e2e-gate.yml (Playwright)"]
+    E --> F["Staging: template-run-e2e-tests.yml (Playwright)"]
     F -->|"approval on protected 'production' Environment"| C2["Repeat Stage 2 for Production\n(same commit SHA, rebuilt into prod ACR)"]
 ```
 
-1. `ci.yml` runs for pull requests (and pushes) to `main`. It validates Bicep, then fans out to the reusable `ci-service.yml` template once per service (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) to build and test only that service's project and its mapped test projects.
-2. `deploy-shared-infrastructure.yml` triggers on pushes to `infra/bootstrap.bicep`, `infra/main.bicep`, or `infra/modules/**` (or manual dispatch) and calls the reusable `deploy-infra.yml`, which owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.
+1. `ci.yml` runs for pull requests (and pushes) to `main`. It validates Bicep, then fans out to the reusable `template-build-service.yml` template once per service (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) to build and test only that service's project and its mapped test projects.
+2. `deploy-shared-infrastructure.yml` triggers on pushes to `infra/bootstrap.bicep`, `infra/main.bicep`, or `infra/modules/**` (or manual dispatch) and calls the reusable `template-deploy-infra.yml`, which owns bootstrap, the Container Apps environment, databases, Redis, and RabbitMQ. It deploys Staging, then Production after the protected Production Environment approval.
 3. Each service has its own top-level pipeline — `deploy-webapp.yml`, `deploy-identity-api.yml`, `deploy-basket-api.yml`, `deploy-catalog-api.yml`, `deploy-ordering-api.yml` — triggered only by pushes to that service's own source, its known shared dependencies, `azure.yaml`, `infra/azd/**`, or the shared reusable templates. Documentation, test-only, E2E-only, and local-only changes do not start Azure deployment.
-4. Each per-service pipeline runs `ci-service.yml` (build + test gate), then calls the reusable `deploy-service.yml` for Staging, then the reusable `e2e-gate.yml` (the same authenticated Playwright suite against the deployed Staging WebApp), then `deploy-service.yml` again for Production. Every service uses the full commit SHA as its image tag, and `azd deploy` only ever patches that one service's container app, so deploying one service cannot delete or reset its siblings.
+4. Each per-service pipeline runs `template-build-service.yml` (build + test gate), then calls the reusable `template-deploy-service.yml` for Staging, then the reusable `template-run-e2e-tests.yml` (the same authenticated Playwright suite against the deployed Staging WebApp), then `template-deploy-service.yml` again for Production. Every service uses the full commit SHA as its image tag, and `azd deploy` only ever patches that one service's container app, so deploying one service cannot delete or reset its siblings.
 5. The shared E2E gate is a hard prerequisite for that pipeline's Production promotion. Because every service's pipeline calls it independently, concurrent pushes to different services each re-verify Staging before promoting. The protected Production Environment then rebuilds the same SHA into the Production registry.
 
-Each `deploy-<service>.yml` also supports manual dispatch for that one service; there is no single "deploy all services" action. `deploy-shared-infrastructure.yml` manual dispatch always redeploys Staging then Production shared infrastructure. After a nightly purge or for first provisioning, run `deploy-shared-infrastructure.yml` first, then dispatch each of the five `deploy-<service>.yml` workflows — `deploy-service.yml`'s live `az containerapp show` check detects the missing container apps and lets `azd provision` recreate them from the placeholder image before `azd deploy` patches in the real one.
+Each `deploy-<service>.yml` also supports manual dispatch for that one service; there is no single "deploy all services" action. `deploy-shared-infrastructure.yml` manual dispatch always redeploys Staging then Production shared infrastructure. After a nightly purge or for first provisioning, run `deploy-shared-infrastructure.yml` first, then dispatch each of the five `deploy-<service>.yml` workflows — `template-deploy-service.yml`'s live `az containerapp show` check detects the missing container apps and lets `azd provision` recreate them from the placeholder image before `azd deploy` patches in the real one.
 
 `bootstrap.bicep` is subscription-scoped and creates only the supplied environment resource group and ACR. `main.bicep` is resource-group-scoped and creates shared resources only. `infra/azd/main.bicep` is resource-group-scoped and is owned by `azd`; it declares all 5 application Container Apps, referencing shared resources as `existing`. This prevents a Staging run from changing Production resources, and `azd deploy`'s per-service image patching prevents a service update from owning unrelated revisions.
 
@@ -140,7 +140,7 @@ az bicep build --file infra/main.bicep
 az bicep build --file infra/azd/main.bicep
 ```
 
-`deploy-service.yml` runs `azd provision` (which performs its own incremental what-if-style reconciliation) before `azd deploy` builds, pushes, and patches the selected application. Never provide deployment secrets through checked-in Bicep parameter files or a committed `.azure/` folder.
+`template-deploy-service.yml` runs `azd provision` (which performs its own incremental what-if-style reconciliation) before `azd deploy` builds, pushes, and patches the selected application. Never provide deployment secrets through checked-in Bicep parameter files or a committed `.azure/` folder.
 
 ## Demo limitations
 
