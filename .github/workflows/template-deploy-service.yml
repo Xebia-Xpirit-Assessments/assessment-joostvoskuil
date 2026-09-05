@@ -111,9 +111,47 @@ jobs:
         shell: bash
         run: azd provision --no-prompt
 
-      - name: Build, push, and deploy selected application with azd
+      - name: Build, push, and deploy selected application
         shell: bash
-        run: azd deploy "${{ inputs.service }}" --no-prompt
+        run: |
+          set -euo pipefail
+          case "${{ inputs.service }}" in
+            webapp)
+              dockerfile='src/WebApp/Dockerfile'
+              repository='webapp'
+              app_name="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            identity-api)
+              dockerfile='src/Identity.API/Dockerfile'
+              repository='identity-api'
+              app_name="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            basket-api)
+              dockerfile='src/Basket.API/Dockerfile'
+              repository='basket-api'
+              app_name="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            catalog-api)
+              dockerfile='src/Catalog.API/Dockerfile'
+              repository='catalog-api'
+              app_name="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            ordering-api)
+              dockerfile='src/Ordering.API/Dockerfile'
+              repository='ordering-api'
+              app_name="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            *) echo "Unsupported service: ${{ inputs.service }}" >&2; exit 2 ;;
+          esac
+
+          registry_login_server=$(az acr show --name "${{ inputs.container-registry }}" --resource-group "${{ inputs.resource-group }}" --query loginServer -o tsv)
+          acr_access_token=$(az acr login --name "${{ inputs.container-registry }}" --expose-token --query accessToken -o tsv)
+          image="$registry_login_server/$repository:${{ inputs.image-tag }}"
+
+          printf '%s' "$acr_access_token" | docker login "$registry_login_server" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+          docker build --file "$dockerfile" --tag "$image" .
+          docker push "$image"
+          az containerapp update --name "$app_name" --resource-group "${{ inputs.resource-group }}" --image "$image" --output none
 
       - name: Verify latest revision
         shell: bash
