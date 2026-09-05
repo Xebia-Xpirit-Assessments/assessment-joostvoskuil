@@ -18,6 +18,8 @@ public class OrderItem
 
     public int ProductId { get; private set; }
 
+    public int ReturnedUnits { get; private set; }
+
     protected OrderItem() { }
 
     public OrderItem(int productId, string productName, decimal unitPrice, decimal discount, string pictureUrl, int units = 1)
@@ -59,5 +61,23 @@ public class OrderItem
         }
 
         Units += units;
+    }
+
+    public int EligibleForReturnUnits => Units - ReturnedUnits;
+
+    public void RequestReturn(int units)
+    {
+        if (units <= 0)
+        {
+            throw new OrderingDomainException("Invalid number of units to return");
+        }
+
+        if (units > EligibleForReturnUnits)
+        {
+            throw new OrderingDomainException(
+                $"Cannot return {units} unit(s) of {ProductName}. Only {EligibleForReturnUnits} unit(s) are eligible for return.");
+        }
+
+        ReturnedUnits += units;
     }
 }

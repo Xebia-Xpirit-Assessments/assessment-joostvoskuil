@@ -152,6 +152,109 @@ public class OrderAggregateTest
     }
 
     [TestMethod]
+    public void RequestReturn_partial_quantity_moves_order_to_ReturnRequested()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units: 5)
+            .Build();
+        MoveOrderToPaidStatus(order);
+
+        //Act
+        order.RequestReturn(new Dictionary<int, int> { [1] = 2 });
+
+        //Assert
+        Assert.AreEqual(OrderStatus.ReturnRequested, order.OrderStatus);
+        Assert.AreEqual(2, order.OrderItems.Single(oi => oi.ProductId == 1).ReturnedUnits);
+    }
+
+    [TestMethod]
+    public void RequestReturn_full_quantity_returns_all_units()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units: 5)
+            .Build();
+        MoveOrderToPaidStatus(order);
+
+        //Act
+        order.RequestReturn(new Dictionary<int, int> { [1] = 5 });
+
+        //Assert
+        Assert.AreEqual(OrderStatus.ReturnRequested, order.OrderStatus);
+        Assert.AreEqual(5, order.OrderItems.Single(oi => oi.ProductId == 1).ReturnedUnits);
+        Assert.AreEqual(0, order.OrderItems.Single(oi => oi.ProductId == 1).EligibleForReturnUnits);
+    }
+
+    [TestMethod]
+    public void RequestReturn_quantity_exceeding_purchased_units_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units: 3)
+            .Build();
+        MoveOrderToPaidStatus(order);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.RequestReturn(new Dictionary<int, int> { [1] = 4 }));
+    }
+
+    [TestMethod]
+    public void RequestReturn_when_order_not_paid_or_shipped_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units: 3)
+            .Build();
+
+        //Act - Assert (order is still in Submitted status)
+        Assert.ThrowsException<OrderingDomainException>(() => order.RequestReturn(new Dictionary<int, int> { [1] = 1 }));
+    }
+
+    [TestMethod]
+    public void SetRefundedStatus_from_ReturnRequested_succeeds()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units: 3)
+            .Build();
+        MoveOrderToPaidStatus(order);
+        order.RequestReturn(new Dictionary<int, int> { [1] = 1 });
+
+        //Act
+        order.SetRefundedStatus();
+
+        //Assert
+        Assert.AreEqual(OrderStatus.Refunded, order.OrderStatus);
+    }
+
+    [TestMethod]
+    public void SetRefundedStatus_when_not_ReturnRequested_throws()
+    {
+        //Arrange
+        var address = new AddressBuilder().Build();
+        var order = new OrderBuilder(address)
+            .AddOne(1, "cup", 10.0m, 0, string.Empty, units: 3)
+            .Build();
+        MoveOrderToPaidStatus(order);
+
+        //Act - Assert
+        Assert.ThrowsException<OrderingDomainException>(() => order.SetRefundedStatus());
+    }
+
+    private static void MoveOrderToPaidStatus(Order order)
+    {
+        order.SetAwaitingValidationStatus();
+        order.SetStockConfirmedStatus();
+        order.SetPaidStatus();
+    }
+
+    [TestMethod]
     public void Remove_event_Order_explicitly()
     {
         //Arrange    
