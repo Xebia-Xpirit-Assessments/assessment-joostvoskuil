@@ -122,11 +122,11 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
       service: webapp
+      display-name: Web App
 
   identity-api:
     needs: changes
@@ -134,11 +134,11 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
       service: identity-api
+      display-name: Identity API
 
   basket-api:
     needs: changes
@@ -146,11 +146,11 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
       service: basket-api
+      display-name: Basket API
 
   catalog-api:
     needs: changes
@@ -158,11 +158,11 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
       service: catalog-api
+      display-name: Catalog API
 
   ordering-api:
     needs: changes
@@ -170,11 +170,11 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
       service: ordering-api
+      display-name: Ordering API
 
   infrastructure:
     name: Validate Bicep templates

@@ -78,7 +78,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     steps:
       - name: Check out repository
@@ -157,7 +156,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     steps:
       - name: Check out repository
