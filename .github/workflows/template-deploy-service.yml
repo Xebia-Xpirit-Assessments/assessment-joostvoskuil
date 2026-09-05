@@ -126,7 +126,7 @@ jobs:
         shell: bash
         run: azd provision --no-prompt
 
-      - name: Validate immutable shared image
+      - name: Validate immutable shared image and sign in to registry
         shell: bash
         run: |
           set -euo pipefail
@@ -136,6 +136,9 @@ jobs:
           image_registry="${image%%/*}"
           [[ "$image_registry" == "$registry_login_server" ]] || { echo "Image must be hosted in the shared registry." >&2; exit 1; }
           [[ "$digest" == sha256:* ]] || { echo "Image must be identified by a SHA-256 digest." >&2; exit 1; }
+          # gh attestation verify pulls the image manifest for an oci:// subject, so it needs registry auth too.
+          az acr login --name "${{ inputs.container-registry }}" --expose-token --query accessToken -o tsv | \
+            docker login "$registry_login_server" --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       - name: Verify build provenance
         shell: bash
