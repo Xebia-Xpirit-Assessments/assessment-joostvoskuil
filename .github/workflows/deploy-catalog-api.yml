@@ -23,10 +23,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: eshop-deploy-catalog-api
-  cancel-in-progress: false
-
 jobs:
   build:
     permissions:
@@ -42,6 +38,9 @@ jobs:
   staging:
     needs: build
     if: ${{ github.event_name != 'pull_request' }}
+    concurrency:
+      group: eshop-deploy-catalog-api-staging
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -71,6 +70,9 @@ jobs:
   production:
     needs: staging-e2e
     if: ${{ github.event_name != 'pull_request' && needs.staging-e2e.result == 'success' }}
+    concurrency:
+      group: eshop-deploy-catalog-api-production
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
