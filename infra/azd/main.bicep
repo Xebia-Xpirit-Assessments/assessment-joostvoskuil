@@ -16,6 +16,17 @@ param workloadName string = 'eshop'
 @description('CAF region abbreviation.')
 param regionCode string = 'swe'
 
+@allowed([
+  'all'
+  'webapp'
+  'identity-api'
+  'basket-api'
+  'catalog-api'
+  'ordering-api'
+])
+@description('The application service to provision. Use all only for shared/manual reconciliation.')
+param serviceName string = 'all'
+
 @description('CAF instance number.')
 param instance string = '001'
 
@@ -98,7 +109,7 @@ var catalogConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainNa
 var identityConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=identitydb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var orderingConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=orderingdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 
-module identityImage './fetch-container-image.bicep' = {
+module identityImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
   name: 'identity-image'
   params: {
     exists: identityApiExists
@@ -106,7 +117,7 @@ module identityImage './fetch-container-image.bicep' = {
   }
 }
 
-module identity '../modules/container-app.bicep' = {
+module identity '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
   name: 'identity'
   params: {
     location: location
@@ -135,7 +146,7 @@ module identity '../modules/container-app.bicep' = {
   }
 }
 
-module basketImage './fetch-container-image.bicep' = {
+module basketImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
   name: 'basket-image'
   params: {
     exists: basketApiExists
@@ -143,7 +154,7 @@ module basketImage './fetch-container-image.bicep' = {
   }
 }
 
-module basket '../modules/container-app.bicep' = {
+module basket '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
   name: 'basket'
   params: {
     location: location
@@ -180,7 +191,7 @@ module basket '../modules/container-app.bicep' = {
   }
 }
 
-module catalogImage './fetch-container-image.bicep' = {
+module catalogImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
   name: 'catalog-image'
   params: {
     exists: catalogApiExists
@@ -188,7 +199,7 @@ module catalogImage './fetch-container-image.bicep' = {
   }
 }
 
-module catalog '../modules/container-app.bicep' = {
+module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
   name: 'catalog'
   params: {
     location: location
@@ -220,7 +231,7 @@ module catalog '../modules/container-app.bicep' = {
   }
 }
 
-module orderingImage './fetch-container-image.bicep' = {
+module orderingImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
   name: 'ordering-image'
   params: {
     exists: orderingApiExists
@@ -228,7 +239,7 @@ module orderingImage './fetch-container-image.bicep' = {
   }
 }
 
-module ordering '../modules/container-app.bicep' = {
+module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
   name: 'ordering'
   params: {
     location: location
@@ -264,7 +275,7 @@ module ordering '../modules/container-app.bicep' = {
   }
 }
 
-module webImage './fetch-container-image.bicep' = {
+module webImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
   name: 'web-image'
   params: {
     exists: webappExists
@@ -272,7 +283,7 @@ module webImage './fetch-container-image.bicep' = {
   }
 }
 
-module web '../modules/container-app.bicep' = {
+module web '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
   name: 'web'
   params: {
     location: location
