@@ -14,6 +14,17 @@ This repository uses GitHub artifact attestations to establish the provenance an
 
 GitHub Releases are optional. Create a protected semantic version tag and a GitHub Release when a human-facing release catalogue, release notes, or external binary distribution is required. A Release is not the signing mechanism and is not required for container provenance, SBOMs, or digest promotion.
 
+## Why two attestations per image
+
+The publisher signs two separate attestations for every image digest. They answer different questions and must both be checked:
+
+| Attestation | Question it answers | Predicate type |
+| --- | --- | --- |
+| Build provenance | Was this exact digest built by our trusted `template-publish-service.yml` workflow, from this exact commit? | `https://slsa.dev/provenance/v1` |
+| SBOM | What components/dependencies does this image contain? | SPDX |
+
+`gh attestation verify` without `--predicate-type` only checks the provenance attestation by default. The SBOM attestation is retrieved separately (see the `signed-build-evidence-*` artifact) and is not itself required to pass for deployment; it exists so components can be identified later without re-scanning the image.
+
 ## Verification and evidence
 
 Authorized operators can verify provenance for an authenticated ACR image with GitHub CLI. Require the repository, reusable signer workflow, and source commit when verifying; do not accept an attestation merely because it exists.
