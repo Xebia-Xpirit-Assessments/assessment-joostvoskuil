@@ -10,6 +10,7 @@ public static class OrdersApi
 
         api.MapPut("/cancel", CancelOrderAsync);
         api.MapPut("/ship", ShipOrderAsync);
+        api.MapPut("/return", RequestOrderReturnAsync);
         api.MapGet("{orderId:int}", GetOrderAsync);
         api.MapGet("/", GetOrdersByUserAsync);
         api.MapGet("/cardtypes", GetCardTypesAsync);
@@ -81,12 +82,63 @@ public static class OrdersApi
     {
         try
         {
+            var userId = services.IdentityService.GetUserIdentity();
+            var userOrders = await services.Queries.GetOrdersFromUserAsync(userId);
+            if (!userOrders.Any(o => o.OrderNumber == orderId))
+            {
+                return TypedResults.NotFound();
+            }
+
             var order = await services.Queries.GetOrderAsync(orderId);
             return TypedResults.Ok(order);
         }
         catch
         {
             return TypedResults.NotFound();
+        }
+    }
+
+    public static async Task<Results<Ok, BadRequest<string>, ProblemHttpResult>> RequestOrderReturnAsync(
+        [FromHeader(Name = "x-requestid")] Guid requestId,
+        RequestOrderReturnRequest request,
+        [AsParameters] OrderServices services)
+    {
+        if (requestId == Guid.Empty)
+        {
+            return TypedResults.BadRequest("Empty GUID is not valid for request ID");
+        }
+
+        var userId = services.IdentityService.GetUserIdentity();
+        var userOrders = await services.Queries.GetOrdersFromUserAsync(userId);
+        if (!userOrders.Any(o => o.OrderNumber == request.OrderNumber))
+        {
+            return TypedResults.BadRequest("Order not found for the current user.");
+        }
+
+        var command = new RequestOrderReturnCommand(request.OrderNumber, userId, request.ItemsToReturn);
+        var requestReturnOrder = new IdentifiedCommand<RequestOrderReturnCommand, bool>(command, requestId);
+
+        services.Logger.LogInformation(
+            "Sending command: {CommandName} - {IdProperty}: {CommandId} ({@Command})",
+            requestReturnOrder.GetGenericTypeName(),
+            nameof(requestReturnOrder.Command.OrderNumber),
+            requestReturnOrder.Command.OrderNumber,
+            requestReturnOrder);
+
+        try
+        {
+            var commandResult = await services.Mediator.Send(requestReturnOrder);
+
+            if (!commandResult)
+            {
+                return TypedResults.Problem(detail: "Return request failed to process.", statusCode: 500);
+            }
+
+            return TypedResults.Ok();
+        }
+        catch (OrderingDomainException ex)
+        {
+            return TypedResults.BadRequest(ex.Message);
         }
     }
 
@@ -183,3 +235,5 @@ public record CreateOrderRequest(
     int CardTypeId,
     string Buyer,
     List<BasketItem> Items);
+
+public record RequestOrderReturnRequest(int OrderNumber, Dictionary<int, int> ItemsToReturn);

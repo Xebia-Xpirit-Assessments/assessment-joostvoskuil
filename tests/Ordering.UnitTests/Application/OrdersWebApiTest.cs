@@ -107,7 +107,12 @@ public class OrdersWebApiTest
     {
         // Arrange
         var fakeOrderId = 123;
+        var fakeUserId = Guid.NewGuid().ToString();
         var fakeDynamicResult = new Order();
+        _identityServiceMock.GetUserIdentity()
+            .Returns(fakeUserId);
+        _orderQueriesMock.GetOrdersFromUserAsync(fakeUserId)
+            .Returns(Task.FromResult(Enumerable.Repeat(new OrderSummary { OrderNumber = fakeOrderId }, 1)));
         _orderQueriesMock.GetOrderAsync(Arg.Any<int>())
             .Returns(Task.FromResult(fakeDynamicResult));
 
@@ -136,6 +141,84 @@ public class OrdersWebApiTest
 
         // Assert
         Assert.IsInstanceOfType<NotFound>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Get_order_not_owned_by_user_returns_not_found()
+    {
+        // Arrange
+        var fakeOrderId = 123;
+        var fakeUserId = Guid.NewGuid().ToString();
+        _identityServiceMock.GetUserIdentity()
+            .Returns(fakeUserId);
+        _orderQueriesMock.GetOrdersFromUserAsync(fakeUserId)
+            .Returns(Task.FromResult(Enumerable.Empty<OrderSummary>()));
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.GetOrderAsync(fakeOrderId, orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<NotFound>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_order_return_bad_request_when_requestId_missing()
+    {
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(
+            Guid.Empty,
+            new RequestOrderReturnRequest(1, new Dictionary<int, int> { [1] = 1 }),
+            orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<BadRequest<string>>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_order_return_bad_request_when_order_not_owned_by_user()
+    {
+        // Arrange
+        var fakeUserId = Guid.NewGuid().ToString();
+        _identityServiceMock.GetUserIdentity()
+            .Returns(fakeUserId);
+        _orderQueriesMock.GetOrdersFromUserAsync(fakeUserId)
+            .Returns(Task.FromResult(Enumerable.Empty<OrderSummary>()));
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(
+            Guid.NewGuid(),
+            new RequestOrderReturnRequest(1, new Dictionary<int, int> { [1] = 1 }),
+            orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<BadRequest<string>>(result.Result);
+    }
+
+    [TestMethod]
+    public async Task Request_order_return_success_for_owner()
+    {
+        // Arrange
+        var fakeOrderId = 1;
+        var fakeUserId = Guid.NewGuid().ToString();
+        _identityServiceMock.GetUserIdentity()
+            .Returns(fakeUserId);
+        _orderQueriesMock.GetOrdersFromUserAsync(fakeUserId)
+            .Returns(Task.FromResult(Enumerable.Repeat(new OrderSummary { OrderNumber = fakeOrderId }, 1)));
+        _mediatorMock.Send(Arg.Any<IdentifiedCommand<RequestOrderReturnCommand, bool>>(), default)
+            .Returns(Task.FromResult(true));
+
+        // Act
+        var orderServices = new OrderServices(_mediatorMock, _orderQueriesMock, _identityServiceMock, _loggerMock);
+        var result = await OrdersApi.RequestOrderReturnAsync(
+            Guid.NewGuid(),
+            new RequestOrderReturnRequest(fakeOrderId, new Dictionary<int, int> { [1] = 1 }),
+            orderServices);
+
+        // Assert
+        Assert.IsInstanceOfType<Ok>(result.Result);
     }
 
     [TestMethod]

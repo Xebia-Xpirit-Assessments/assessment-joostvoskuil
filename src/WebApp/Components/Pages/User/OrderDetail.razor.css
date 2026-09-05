@@ -1,0 +1,73 @@
+﻿.order-detail {
+    padding: 0 10rem;
+}
+
+.order-detail .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+}
+
+.order-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.order-items th,
+.order-items td {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid #D2D2D2;
+}
+
+.order-status .status {
+    border-radius: 1.25rem;
+    border: 1px solid #A3A3A3;
+    color: #A3A3A3;
+    font-size: 0.75rem;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.25rem;
+    padding: 0.5rem 1rem;
+}
+
+.order-status .status.cancelled {
+    color: #FF4E4E;
+    border: 1px solid #FF4E4E;
+}
+
+.order-status .status.paid,
+.order-status .status.shipped {
+    color: #2A9E01;
+    border: 1px solid #2A9E01;
+}
+
+.order-status .status.returnrequested {
+    color: #C77700;
+    border: 1px solid #C77700;
+}
+
+.order-status .status.refunded {
+    color: #4E4EFF;
+    border: 1px solid #4E4EFF;
+}
+
+.validation-message {
+    color: #FF4E4E;
+}
+
+.success-message {
+    color: #2A9E01;
+}
+
+@media only screen and (max-width: 480px) {
+    .order-detail {
+        padding: 0 1rem;
+    }
+}
+
+@media only screen and (min-width: 481px) and (max-width: 1024px) {
+    .order-detail {
+        padding: 0 3rem;
+    }
+}

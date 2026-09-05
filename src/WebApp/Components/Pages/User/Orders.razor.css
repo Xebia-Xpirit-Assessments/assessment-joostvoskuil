@@ -10,6 +10,12 @@
     align-self: stretch;
 }
 
+.orders-item .order-link {
+    display: contents;
+    color: inherit;
+    text-decoration: none;
+}
+
 .orders-item > div {
     flex: 1 0 0;
 }

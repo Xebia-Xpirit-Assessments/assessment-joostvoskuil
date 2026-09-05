@@ -28,20 +28,22 @@ else
         @foreach (var order in orders)
         {
             <li class="orders-item">
-                <div class="order-number">
-                    @order.OrderNumber
-                </div>
-                <div class="order-date">
-                    @order.Date
-                </div>
-                <div class="order-total">
-                   $@order.Total.ToString("0.00")
-                </div>
-                <div class="order-status">
-                    <span class="status @order.Status.ToLower()">
-                        @order.Status
-                    </span>
-                </div>
+                <a class="order-link" href="@($"user/orders/{order.OrderNumber}")">
+                    <div class="order-number">
+                        @order.OrderNumber
+                    </div>
+                    <div class="order-date">
+                        @order.Date
+                    </div>
+                    <div class="order-total">
+                       $@order.Total.ToString("0.00")
+                    </div>
+                    <div class="order-status">
+                        <span class="status @order.Status.ToLower()">
+                            @order.Status
+                        </span>
+                    </div>
+                </a>
             </li>
         }
     </ul>

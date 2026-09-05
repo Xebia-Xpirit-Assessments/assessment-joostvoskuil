@@ -1,0 +1,159 @@
+﻿@page "/user/orders/{orderNumber:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject OrderingService OrderingService
+
+<PageTitle>Order details | AdventureWorks</PageTitle>
+<SectionContent SectionName="page-header-title">Order details</SectionContent>
+
+<div class="order-detail">
+    <a href="user/orders" class="back-link">&larr; Back to orders</a>
+
+    @if (order is null)
+    {
+        <p>Loading...</p>
+    }
+    else
+    {
+        <h2>Order #@order.OrderNumber</h2>
+        <p class="order-status"><span class="status @order.Status.ToLower()">@order.Status</span></p>
+        @if (!string.IsNullOrEmpty(order.Description))
+        {
+            <p class="order-description">@order.Description</p>
+        }
+
+        <table class="order-items">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Units</th>
+                    <th>Unit price</th>
+                    <th>Already returned</th>
+                    @if (CanRequestReturn)
+                    {
+                        <th>Return quantity</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in order.OrderItems)
+                {
+                    var eligibleUnits = item.Units - item.ReturnedUnits;
+                    <tr>
+                        <td>@item.ProductName</td>
+                        <td aria-label="product quantity">@item.Units</td>
+                        <td>$@item.UnitPrice.ToString("0.00")</td>
+                        <td>@item.ReturnedUnits</td>
+                        @if (CanRequestReturn)
+                        {
+                            <td>
+                                @if (eligibleUnits > 0)
+                                {
+                                    <input type="number" min="0" max="@eligibleUnits" aria-label="return quantity"
+                                           value="@GetReturnQuantity(item.ProductId)"
+                                           @onchange="@(e => SetReturnQuantity(item.ProductId, e.Value))" />
+                                }
+                                else
+                                {
+                                    <span>Fully returned</span>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (CanRequestReturn)
+        {
+            <button class="button button-primary" @onclick="SubmitReturnAsync">Request return</button>
+        }
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <p class="validation-message" role="alert">@errorMessage</p>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <p class="success-message" role="status">@successMessage</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int OrderNumber { get; set; }
+
+    private OrderDetailRecord? order;
+    private readonly Dictionary<int, int> returnQuantities = new();
+    private string? errorMessage;
+    private string? successMessage;
+
+    private bool CanRequestReturn => order is not null &&
+        (string.Equals(order.Status, "Paid", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(order.Status, "Shipped", StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrderAsync();
+    }
+
+    private async Task LoadOrderAsync()
+    {
+        order = await OrderingService.GetOrder(OrderNumber);
+        returnQuantities.Clear();
+    }
+
+    private int GetReturnQuantity(int productId) =>
+        returnQuantities.TryGetValue(productId, out var quantity) ? quantity : 0;
+
+    private void SetReturnQuantity(int productId, object? value)
+    {
+        if (int.TryParse(value?.ToString(), out var quantity) && quantity >= 0)
+        {
+            returnQuantities[productId] = quantity;
+        }
+    }
+
+    private async Task SubmitReturnAsync()
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        var itemsToReturn = returnQuantities.Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => kv.Value);
+        if (itemsToReturn.Count == 0)
+        {
+            errorMessage = "Enter a quantity to return for at least one item.";
+            return;
+        }
+
+        var response = await OrderingService.RequestReturn(new RequestOrderReturnRequest(OrderNumber, itemsToReturn), Guid.NewGuid());
+        if (response.IsSuccessStatusCode)
+        {
+            successMessage = "Your return request has been submitted.";
+            await LoadOrderAsync();
+        }
+        else
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            errorMessage = TryParseJsonString(content) ?? content;
+            if (string.IsNullOrWhiteSpace(errorMessage))
+            {
+                errorMessage = "We couldn't process your return request. Please try again.";
+            }
+        }
+    }
+
+    private static string? TryParseJsonString(string content)
+    {
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<string>(content);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+}

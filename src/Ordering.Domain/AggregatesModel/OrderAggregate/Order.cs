@@ -167,6 +167,50 @@ public class Order
         }
     }
 
+    // DDD Patterns comment
+    // Customers can request a full or partial return for orders that were already paid for (or shipped),
+    // as long as the requested quantities do not exceed the units that are still eligible for return.
+    public void RequestReturn(IDictionary<int, int> itemsToReturn)
+    {
+        if (OrderStatus != OrderStatus.Paid && OrderStatus != OrderStatus.Shipped)
+        {
+            StatusChangeException(OrderStatus.ReturnRequested);
+        }
+
+        if (itemsToReturn is null || itemsToReturn.Count == 0)
+        {
+            throw new OrderingDomainException("At least one item must be specified to request a return.");
+        }
+
+        foreach (var (productId, units) in itemsToReturn)
+        {
+            var orderItem = _orderItems.SingleOrDefault(oi => oi.ProductId == productId);
+
+            if (orderItem is null)
+            {
+                throw new OrderingDomainException($"Product {productId} is not part of this order.");
+            }
+
+            orderItem.RequestReturn(units);
+        }
+
+        OrderStatus = OrderStatus.ReturnRequested;
+        Description = "The customer requested a return for one or more items in this order.";
+        AddDomainEvent(new OrderStatusChangedToReturnRequestedDomainEvent(this));
+    }
+
+    public void SetRefundedStatus()
+    {
+        if (OrderStatus != OrderStatus.ReturnRequested)
+        {
+            StatusChangeException(OrderStatus.Refunded);
+        }
+
+        OrderStatus = OrderStatus.Refunded;
+        Description = "The returned items were refunded to the customer.";
+        AddDomainEvent(new OrderStatusChangedToRefundedDomainEvent(this));
+    }
+
     private void AddOrderStartedDomainEvent(string userId, string userName, int cardTypeId, string cardNumber,
             string cardSecurityNumber, string cardHolderName, DateTime cardExpiration)
     {

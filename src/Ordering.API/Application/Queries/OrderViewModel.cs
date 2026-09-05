@@ -6,6 +6,8 @@ public record Orderitem
     public int Units { get; init; }
     public double UnitPrice { get; init; }
     public string PictureUrl { get; init; }
+    public int ProductId { get; init; }
+    public int ReturnedUnits { get; init; }
 }
 
 public record Order
