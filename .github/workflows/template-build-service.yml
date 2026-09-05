@@ -1,4 +1,4 @@
-name: _eShop - Service CI
+name: _eShop - Template for building one service
 
 on:
   workflow_call:

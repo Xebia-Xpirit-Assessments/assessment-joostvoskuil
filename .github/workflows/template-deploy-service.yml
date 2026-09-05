@@ -1,4 +1,4 @@
-name: _eShop - Deploy one service
+name: _eShop - Template for deploying one service
 
 on:
   workflow_call:

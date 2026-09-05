@@ -12,8 +12,7 @@ Use this skill for all Azure infrastructure and deployment changes in this repos
 
 - Infrastructure is written in Bicep under `infra/`.
 - Reusable resource definitions belong under `infra/modules/`.
-- `infra/bootstrap.bicep` is subscription-scoped and may create only the selected environment's resource group and bootstrap resources.
-- `infra/main.bicep` is resource-group-scoped and deploys shared resources (Container Apps environment, PostgreSQL, Redis, RabbitMQ) inside one environment resource group. Both are deployed via raw `az deployment group`/`az deployment sub` calls, not `azd`.
+- `infra/main.bicep` is subscription-scoped: it creates the selected environment's resource group and ACR, then deploys the remaining shared resources (Container Apps environment, PostgreSQL, Redis, RabbitMQ) into that resource group via nested modules with an explicit `scope: resourceGroup(rg.name)`. It is deployed with a single `az deployment sub create` call, not `azd`.
 - The 5 application Container Apps (`webapp`, `identity-api`, `basket-api`, `catalog-api`, `ordering-api`) are declared in the root `azure.yaml` and provisioned/deployed with `azd` against `infra/azd/main.bicep`. `azd` builds and pushes their Docker images natively; it never touches shared infrastructure.
 - GitHub Actions owns source checkout, validation, image publication (via `azd deploy` for application services), orchestration, and deployment.
 - Local .NET Aspire remains the local composition model; do not change `src/eShop.AppHost/Program.cs` into the Azure deployment mechanism.
@@ -21,16 +20,14 @@ Use this skill for all Azure infrastructure and deployment changes in this repos
 
 ## Deployment order
 
-The four stages run in this fixed order; each depends on resources the previous stage created. Never provision `infra/azd/main.bicep` before `main.bicep` has run — its `existing` references will fail to resolve.
+The three stages run in this fixed order; each depends on resources the previous stage created. Never provision `infra/azd/main.bicep` before `main.bicep` has run — its `existing` references will fail to resolve.
 
 ```mermaid
 flowchart TD
-    A["1. infra/bootstrap.bicep\n(subscription scope)\naz deployment sub create"] --> A1["Resource Group + ACR"]
-    A1 --> B["2. infra/main.bicep\n(resource-group scope)\naz deployment group create"]
-    B --> B1["Container Apps Environment, Log Analytics,\nPostgreSQL, Redis, RabbitMQ Container App"]
-    B1 --> C["3. azd provision\nazure.yaml -> infra/azd/main.bicep\n(resource-group scope)"]
-    C --> C1["References stage 2 resources as 'existing'\nDeclares/reconciles 5 Container Apps\n(placeholder image if not yet deployed)"]
-    C1 --> D["4. azd deploy <service>\nbuild -> push SHA-tagged image to ACR\n-> patch only that Container App's revision"]
+    A["1. infra/main.bicep\n(subscription scope)\naz deployment sub create"] --> A1["Resource Group + ACR + Container Apps Environment,\nLog Analytics, PostgreSQL, Redis, RabbitMQ Container App"]
+    A1 --> C["2. azd provision\nazure.yaml -> infra/azd/main.bicep\n(resource-group scope)"]
+    C --> C1["References stage 1 resources as 'existing'\nDeclares/reconciles 5 Container Apps\n(placeholder image if not yet deployed)"]
+    C1 --> D["3. azd deploy <service>\nbuild -> push SHA-tagged image to ACR\n-> patch only that Container App's revision"]
 ```
 
 ## Environment isolation
@@ -209,7 +206,6 @@ Artifact rules:
 Before merging infrastructure or workflow changes:
 
 1. Compile every Bicep entry point:
-   - `az bicep build --file infra/bootstrap.bicep --stdout`
    - `az bicep build --file infra/main.bicep --stdout`
    - `az bicep build --file infra/azd/main.bicep --stdout`
 2. Resolve all errors and review warnings; do not treat a successful command as proof that the design is safe.

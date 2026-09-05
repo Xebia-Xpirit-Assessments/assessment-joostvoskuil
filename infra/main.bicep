@@ -1,7 +1,10 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
 @description('Azure region, for example swedencentral.')
 param location string
+
+@description('CAF-compliant resource group name, supplied by the deployment workflow.')
+param resourceGroupName string
 
 @allowed([
   'stg'
@@ -19,7 +22,9 @@ param regionCode string = 'swe'
 @description('CAF instance number.')
 param instance string = '001'
 
-@description('The environment-specific ACR name created by bootstrap.bicep.')
+@description('CAF-compliant Azure Container Registry name. ACR names are globally unique and alphanumeric only.')
+@minLength(5)
+@maxLength(50)
 param containerRegistryName string
 
 @description('PostgreSQL administrator login.')
@@ -46,8 +51,25 @@ var tags = {
   workload: workloadName
 }
 
+resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: resourceGroupName
+  location: location
+  tags: tags
+}
+
+module registry './modules/acr.bicep' = {
+  name: 'containerRegistry'
+  scope: resourceGroup(rg.name)
+  params: {
+    location: location
+    name: containerRegistryName
+    tags: tags
+  }
+}
+
 module containerAppsEnvironment './modules/container-app-environment.bicep' = {
   name: 'containerAppsEnvironment'
+  scope: resourceGroup(rg.name)
   params: {
     location: location
     name: environmentName
@@ -58,6 +80,7 @@ module containerAppsEnvironment './modules/container-app-environment.bicep' = {
 
 module postgres './modules/postgres.bicep' = {
   name: 'postgres'
+  scope: resourceGroup(rg.name)
   params: {
     location: location
     name: postgresName
@@ -69,6 +92,7 @@ module postgres './modules/postgres.bicep' = {
 
 module redis './modules/redis.bicep' = {
   name: 'redis'
+  scope: resourceGroup(rg.name)
   params: {
     location: location
     name: redisName
@@ -78,6 +102,7 @@ module redis './modules/redis.bicep' = {
 
 module rabbitMq './modules/container-app.bicep' = {
   name: 'rabbitMq'
+  scope: resourceGroup(rg.name)
   params: {
     location: location
     name: rabbitMqName
@@ -105,5 +130,7 @@ module rabbitMq './modules/container-app.bicep' = {
     tags: tags
   }
 }
+output resourceGroupName string = rg.name
 output containerAppsEnvironmentName string = environmentName
-output containerRegistryName string = containerRegistryName
+output containerRegistryName string = registry.outputs.name
+output containerRegistryLoginServer string = registry.outputs.loginServer

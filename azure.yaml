@@ -2,8 +2,8 @@ name: eshop
 metadata:
   template: eshop-azd@0.1.0
 
-# Shared infrastructure (ACR, Container Apps environment, PostgreSQL, Redis, RabbitMQ) is
-# provisioned separately via infra/bootstrap.bicep and infra/main.bicep, not by azd.
+# Shared infrastructure (resource group, ACR, Container Apps environment, PostgreSQL, Redis,
+# RabbitMQ) is provisioned separately via infra/main.bicep, not by azd.
 # azd only owns the 5 application Container Apps declared in infra/azd/main.bicep.
 infra:
   path: infra/azd

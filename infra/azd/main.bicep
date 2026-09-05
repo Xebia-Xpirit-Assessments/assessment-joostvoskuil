@@ -19,7 +19,7 @@ param regionCode string = 'swe'
 @description('CAF instance number.')
 param instance string = '001'
 
-@description('The environment-specific ACR name created by bootstrap.bicep.')
+@description('The environment-specific ACR name created by main.bicep.')
 param containerRegistryName string
 
 @description('PostgreSQL administrator login.')

@@ -19,11 +19,6 @@ on:
       - 'global.json'
       - 'nuget.config'
       - '.dockerignore'
-      - '.github/workflows/ci-service.yml'
-      - '.github/workflows/deploy-service.yml'
-      - '.github/workflows/e2e-gate.yml'
-      - '.github/workflows/deploy-ordering-api.yml'
-      - '.github/workflows/deploy.yml'
   pull_request:
     branches: [main]
     paths:
@@ -42,11 +37,11 @@ on:
       - 'global.json'
       - 'nuget.config'
       - '.dockerignore'
-      - '.github/workflows/ci-service.yml'
-      - '.github/workflows/deploy-service.yml'
-      - '.github/workflows/e2e-gate.yml'
+      - '.github/workflows/template-build-service.yml'
+      - '.github/workflows/template-deploy-service.yml'
+      - '.github/workflows/template-run-e2e-tests.yml'
       - '.github/workflows/deploy-ordering-api.yml'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/deploy-all.yml'
   workflow_dispatch:
   workflow_call:
 
@@ -64,7 +59,7 @@ jobs:
       checks: write
       code-quality: write
       pull-requests: read
-    uses: ./.github/workflows/ci-service.yml
+    uses: ./.github/workflows/template-build-service.yml
     with:
       service: ordering-api
 
@@ -74,7 +69,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-service.yml
+    uses: ./.github/workflows/template-deploy-service.yml
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
@@ -92,7 +87,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/e2e-gate.yml
+    uses: ./.github/workflows/template-run-e2e-tests.yml
     secrets: inherit
 
   production:
@@ -101,7 +96,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-service.yml
+    uses: ./.github/workflows/template-deploy-service.yml
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001
