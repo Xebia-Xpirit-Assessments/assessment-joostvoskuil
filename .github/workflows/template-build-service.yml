@@ -7,13 +7,17 @@ on:
         description: 'Service name: webapp, identity-api, basket-api, catalog-api, or ordering-api.'
         required: true
         type: string
+      display-name:
+        description: 'Human-readable service name used in job and report titles.'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build (${{ inputs.service }})
+    name: Build (${{ inputs.display-name }})
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -45,7 +49,7 @@ jobs:
         run: dotnet build "${{ steps.project.outputs.path }}" --configuration Release --no-restore
 
   dockerfile-check:
-    name: Validate Docker context (${{ inputs.service }})
+    name: Validate Docker context (${{ inputs.display-name }})
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -68,7 +72,7 @@ jobs:
           test -f "$dockerfile"
 
   unit-tests:
-    name: Unit tests (${{ inputs.service }})
+    name: Unit tests (${{ inputs.display-name }})
     if: ${{ contains(fromJSON('["webapp","basket-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
     permissions:
@@ -132,11 +136,11 @@ jobs:
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         with:
-          name: Unit tests (${{ inputs.service }})
+          name: Unit tests (${{ inputs.display-name }})
           path: test-results/*.trx
           reporter: dotnet-trx
           fail-on-empty: false
-          report-title: Unit tests (${{ inputs.service }})
+          report-title: Unit tests (${{ inputs.display-name }})
 
       - name: Upload coverage
         if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -145,9 +149,10 @@ jobs:
           file: coverage/unit.cobertura.xml
           language: C#
           label: code-coverage/unit-${{ inputs.service }}
+          fail-on-error: false
 
   functional-tests:
-    name: Functional tests (${{ inputs.service }})
+    name: Functional tests (${{ inputs.display-name }})
     if: ${{ contains(fromJSON('["catalog-api","ordering-api"]'), inputs.service) }}
     runs-on: ubuntu-latest
     permissions:
@@ -208,11 +213,11 @@ jobs:
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         with:
-          name: Functional tests (${{ inputs.service }})
+          name: Functional tests (${{ inputs.display-name }})
           path: test-results/*.trx
           reporter: dotnet-trx
           fail-on-empty: false
-          report-title: Functional tests (${{ inputs.service }})
+          report-title: Functional tests (${{ inputs.display-name }})
 
       - name: Upload coverage
         if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -221,3 +226,4 @@ jobs:
           file: coverage/functional.cobertura.xml
           language: C#
           label: code-coverage/functional-${{ inputs.service }}
+          fail-on-error: false
