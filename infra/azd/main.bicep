@@ -30,8 +30,11 @@ param serviceName string = 'all'
 @description('CAF instance number.')
 param instance string = '001'
 
-@description('The environment-specific ACR name created by main.bicep.')
+@description('The shared ACR name created by shared-registry.bicep.')
 param containerRegistryName string
+
+@description('The resource group that owns the shared ACR.')
+param containerRegistryResourceGroupName string
 
 @description('PostgreSQL administrator login.')
 param postgresAdministratorLogin string = 'eshopadmin'
@@ -81,10 +84,6 @@ var tags = {
 
 resource redis 'Microsoft.Cache/redisEnterprise@2025-04-01' existing = {
   name: redisName
-}
-
-resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
-  name: containerRegistryName
 }
 
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' existing = {
@@ -146,6 +145,15 @@ module identity '../modules/container-app.bicep' = if (serviceName == 'all' || s
   }
 }
 
+module identityAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
+  name: 'identity-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: identity!.outputs.identityPrincipalId
+  }
+}
+
 module basketImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
   name: 'basket-image'
   params: {
@@ -191,6 +199,15 @@ module basket '../modules/container-app.bicep' = if (serviceName == 'all' || ser
   }
 }
 
+module basketAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
+  name: 'basket-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: basket!.outputs.identityPrincipalId
+  }
+}
+
 module catalogImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
   name: 'catalog-image'
   params: {
@@ -228,6 +245,15 @@ module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || se
       }
     ]
     tags: union(tags, { 'azd-service-name': 'catalog-api' })
+  }
+}
+
+module catalogAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
+  name: 'catalog-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: catalog!.outputs.identityPrincipalId
   }
 }
 
@@ -272,6 +298,15 @@ module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || s
       }
     ]
     tags: union(tags, { 'azd-service-name': 'ordering-api' })
+  }
+}
+
+module orderingAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
+  name: 'ordering-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: ordering!.outputs.identityPrincipalId
   }
 }
 
@@ -328,4 +363,13 @@ module web '../modules/container-app.bicep' = if (serviceName == 'all' || servic
   }
 }
 
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
+module webAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
+  name: 'web-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: web!.outputs.identityPrincipalId
+  }
+}
+
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = '${containerRegistryName}.azurecr.io'

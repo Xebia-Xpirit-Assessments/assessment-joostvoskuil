@@ -89,7 +89,8 @@ jobs:
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
-      container-registry: acreshopstgswe001
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
       location: swedencentral
       region-code: swe
       environment-code: stg
@@ -105,7 +106,8 @@ jobs:
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001
-      container-registry: acreshopprdswe001
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
       location: swedencentral
       region-code: swe
       environment-code: prd

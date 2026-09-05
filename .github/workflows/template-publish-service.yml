@@ -1,0 +1,141 @@
+name: _eShop - Publish and attest one service image
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+      container-registry:
+        required: true
+        type: string
+      container-registry-resource-group:
+        required: true
+        type: string
+    outputs:
+      image-reference:
+        description: 'Fully-qualified immutable image reference that passed provenance verification.'
+        value: ${{ jobs.publish.outputs.image-reference }}
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  publish:
+    name: Publish and attest ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    environment: shared
+    outputs:
+      image-reference: ${{ steps.image.outputs.reference }}
+    concurrency:
+      group: eshop-publish-${{ inputs.service }}-${{ inputs.image-tag }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push selected application image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.service }}" in
+            webapp) dockerfile='src/WebApp/Dockerfile'; repository='webapp' ;;
+            identity-api) dockerfile='src/Identity.API/Dockerfile'; repository='identity-api' ;;
+            basket-api) dockerfile='src/Basket.API/Dockerfile'; repository='basket-api' ;;
+            catalog-api) dockerfile='src/Catalog.API/Dockerfile'; repository='catalog-api' ;;
+            ordering-api) dockerfile='src/Ordering.API/Dockerfile'; repository='ordering-api' ;;
+            *) echo "Unsupported service: ${{ inputs.service }}" >&2; exit 2 ;;
+          esac
+
+          registry_login_server=$(az acr show --name "${{ inputs.container-registry }}" --resource-group "${{ inputs.container-registry-resource-group }}" --query loginServer -o tsv)
+          image="$registry_login_server/$repository:${{ inputs.image-tag }}"
+          az acr login --name "${{ inputs.container-registry }}" --expose-token --query accessToken -o tsv | \
+            docker login "$registry_login_server" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+          docker build --file "$dockerfile" --tag "$image" .
+          docker push "$image"
+
+          digest=$(az acr repository show --name "${{ inputs.container-registry }}" --image "$repository:${{ inputs.image-tag }}" --query digest -o tsv)
+          [[ -n "$digest" && "$digest" != 'null' ]] || { echo "ACR did not return an image digest." >&2; exit 1; }
+          {
+            echo "repository=$registry_login_server/$repository"
+            echo "digest=$digest"
+            echo "reference=$registry_login_server/$repository@$digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ steps.image.outputs.reference }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+
+      - name: Generate build provenance attestation
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.repository }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate SBOM attestation
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.repository }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: Verify build provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh attestation verify "oci://${{ steps.image.outputs.reference }}"
+          --repo "$GITHUB_REPOSITORY"
+          --signer-workflow "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/template-publish-service.yml"
+          --source-digest "$GITHUB_SHA"
+
+      - name: Record signed build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          provenance_url="${{ steps.provenance.outputs.attestation-url }}"
+          sbom_url="${{ steps.sbom.outputs.attestation-url }}"
+          [[ -n "$provenance_url" ]] || { echo "Provenance attestation was not persisted." >&2; exit 1; }
+          [[ -n "$sbom_url" ]] || { echo "SBOM attestation was not persisted." >&2; exit 1; }
+          cat > deployment-evidence.json <<EOF
+          {
+            "service": "${{ inputs.service }}",
+            "sourceCommit": "${{ github.sha }}",
+            "image": "${{ steps.image.outputs.reference }}",
+            "provenanceAttestation": "$provenance_url",
+            "sbomAttestation": "$sbom_url"
+          }
+          EOF
+
+      - name: Upload signed build evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-build-evidence-${{ inputs.service }}-${{ github.sha }}
+          path: |
+            sbom.spdx.json
+            deployment-evidence.json
+          retention-days: 365

@@ -32,7 +32,7 @@ jobs:
       display-name: Identity API
 
   staging:
-    needs: build
+    needs: publish
     if: ${{ github.event_name != 'pull_request' }}
     concurrency:
       group: eshop-deploy-identity-api-staging
@@ -40,8 +40,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      attestations: write
-      artifact-metadata: write
     uses: ./.github/workflows/template-deploy-service.yml
     with:
       environment: staging
@@ -52,8 +50,7 @@ jobs:
       region-code: swe
       environment-code: stg
       service: identity-api
-      image-tag: ${{ github.sha }}
-      attest: true
+      image-reference: ${{ needs.publish.outputs.image-reference }}
     secrets: inherit
 
   staging-e2e:
@@ -67,8 +64,23 @@ jobs:
     uses: ./.github/workflows/template-run-e2e-tests.yml
     secrets: inherit
 
+  publish:
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/template-publish-service.yml
+    with:
+      service: identity-api
+      image-tag: ${{ github.sha }}
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
+    secrets: inherit
+
   production:
-    needs: [staging, staging-e2e]
+    needs: [publish, staging, staging-e2e]
     if: ${{ github.event_name != 'pull_request' && needs.staging-e2e.result == 'success' }}
     concurrency:
       group: eshop-deploy-identity-api-production
@@ -86,6 +98,5 @@ jobs:
       region-code: swe
       environment-code: prd
       service: identity-api
-      image-tag: ${{ github.sha }}
-      source-image: ${{ needs.staging.outputs.image-reference }}
+      image-reference: ${{ needs.publish.outputs.image-reference }}
     secrets: inherit
