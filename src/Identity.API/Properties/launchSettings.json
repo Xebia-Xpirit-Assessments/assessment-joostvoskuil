@@ -5,7 +5,8 @@
       "launchBrowser": true,
       "applicationUrl": "http://localhost:5223",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DCP_IP_VERSION_PREFERENCE": "IPv4"
       }
     },
     "https": {
@@ -13,7 +14,8 @@
       "launchBrowser": true,
       "applicationUrl": "https://localhost:5243;http://localhost:5223",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DCP_IP_VERSION_PREFERENCE": "IPv4"
       }
     }
   }
