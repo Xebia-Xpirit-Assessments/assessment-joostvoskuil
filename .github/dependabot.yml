@@ -42,7 +42,7 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
     labels:
-      - "GitHubActions"
+      - "Actions"
       - "dependencies"
     groups:
       patch:
