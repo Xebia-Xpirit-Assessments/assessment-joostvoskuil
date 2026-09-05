@@ -59,6 +59,45 @@ param catalogApiExists bool = true
 @description('Whether the Ordering API container app already exists. False only for first-time provisioning.')
 param orderingApiExists bool = true
 
+@description('Health endpoint used while application containers start and become ready.')
+param healthProbePath string = '/health'
+@description('Liveness endpoint for application containers.')
+param livenessProbePath string = '/alive'
+@minValue(0)
+param healthProbeInitialDelaySeconds int = 10
+@minValue(1)
+param healthProbePeriodSeconds int = 10
+@minValue(1)
+param healthProbeTimeoutSeconds int = 5
+@minValue(1)
+param healthProbeFailureThreshold int = 3
+
+@minValue(0)
+param webAppMinReplicas int = 1
+@minValue(1)
+param webAppMaxReplicas int = 1
+param webAppScaleRules array = []
+@minValue(0)
+param identityApiMinReplicas int = 1
+@minValue(1)
+param identityApiMaxReplicas int = 1
+param identityApiScaleRules array = []
+@minValue(0)
+param basketApiMinReplicas int = 1
+@minValue(1)
+param basketApiMaxReplicas int = 1
+param basketApiScaleRules array = []
+@minValue(0)
+param catalogApiMinReplicas int = 1
+@minValue(1)
+param catalogApiMaxReplicas int = 1
+param catalogApiScaleRules array = []
+@minValue(0)
+param orderingApiMinReplicas int = 1
+@minValue(1)
+param orderingApiMaxReplicas int = 1
+param orderingApiScaleRules array = []
+
 var nameSuffix = '${workloadName}-${environment}-${regionCode}-${instance}'
 var environmentName = 'cae-${nameSuffix}'
 var postgresName = 'psql-${nameSuffix}'
@@ -109,6 +148,42 @@ var catalogConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainNa
 var identityConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=identitydb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 var orderingConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Port=5432;Database=orderingdb;Username=${postgresAdministratorLogin};Password=${postgresAdministratorPassword};Ssl Mode=Require;Trust Server Certificate=true'
 
+var applicationHealthProbes = [
+  {
+    type: 'Startup'
+    httpGet: {
+      path: healthProbePath
+      port: 8080
+    }
+    initialDelaySeconds: healthProbeInitialDelaySeconds
+    periodSeconds: healthProbePeriodSeconds
+    timeoutSeconds: healthProbeTimeoutSeconds
+    failureThreshold: healthProbeFailureThreshold
+  }
+  {
+    type: 'Liveness'
+    httpGet: {
+      path: livenessProbePath
+      port: 8080
+    }
+    initialDelaySeconds: healthProbeInitialDelaySeconds
+    periodSeconds: healthProbePeriodSeconds
+    timeoutSeconds: healthProbeTimeoutSeconds
+    failureThreshold: healthProbeFailureThreshold
+  }
+  {
+    type: 'Readiness'
+    httpGet: {
+      path: healthProbePath
+      port: 8080
+    }
+    initialDelaySeconds: healthProbeInitialDelaySeconds
+    periodSeconds: healthProbePeriodSeconds
+    timeoutSeconds: healthProbeTimeoutSeconds
+    failureThreshold: healthProbeFailureThreshold
+  }
+]
+
 module identityImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
   name: 'identity-image'
   params: {
@@ -126,6 +201,10 @@ module identity '../modules/container-app.bicep' = if (serviceName == 'all' || s
     containerRegistryName: containerRegistryName
     image: identityImage.?outputs.containers[?0].?image ?? placeholderImage
     externalIngress: true
+    minReplicas: identityApiMinReplicas
+    maxReplicas: identityApiMaxReplicas
+    scaleRules: identityApiScaleRules
+    probes: applicationHealthProbes
     environmentVariables: [
       {
         name: 'ConnectionStrings__identitydb'
@@ -163,6 +242,10 @@ module basket '../modules/container-app.bicep' = if (serviceName == 'all' || ser
     containerRegistryName: containerRegistryName
     image: basketImage.?outputs.containers[?0].?image ?? placeholderImage
     ingressTransport: 'http2'
+    minReplicas: basketApiMinReplicas
+    maxReplicas: basketApiMaxReplicas
+    scaleRules: basketApiScaleRules
+    probes: applicationHealthProbes
     environmentVariables: [
       {
         name: 'ConnectionStrings__Redis'
@@ -207,6 +290,10 @@ module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || se
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
     image: catalogImage.?outputs.containers[?0].?image ?? placeholderImage
+    minReplicas: catalogApiMinReplicas
+    maxReplicas: catalogApiMaxReplicas
+    scaleRules: catalogApiScaleRules
+    probes: applicationHealthProbes
     environmentVariables: [
       {
         name: 'ConnectionStrings__catalogdb'
@@ -247,6 +334,10 @@ module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || s
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
     image: orderingImage.?outputs.containers[?0].?image ?? placeholderImage
+    minReplicas: orderingApiMinReplicas
+    maxReplicas: orderingApiMaxReplicas
+    scaleRules: orderingApiScaleRules
+    probes: applicationHealthProbes
     environmentVariables: [
       {
         name: 'ConnectionStrings__orderingdb'
@@ -292,6 +383,10 @@ module web '../modules/container-app.bicep' = if (serviceName == 'all' || servic
     containerRegistryName: containerRegistryName
     image: webImage.?outputs.containers[?0].?image ?? placeholderImage
     externalIngress: true
+    minReplicas: webAppMinReplicas
+    maxReplicas: webAppMaxReplicas
+    scaleRules: webAppScaleRules
+    probes: applicationHealthProbes
     environmentVariables: [
       {
         name: 'ConnectionStrings__EventBus'

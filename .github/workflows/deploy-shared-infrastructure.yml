@@ -25,19 +25,20 @@ concurrency:
 
 jobs:
   validate-bicep:
-    name: Validate Bicep templates
+    name: Compile and lint Bicep templates
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Build Bicep templates
+      - name: Compile and lint Bicep templates
         shell: bash
         run: |
           set -euo pipefail
           for template in infra/main.bicep infra/azd/main.bicep; do
             echo "Validating $template"
             az bicep build --file "$template" --stdout > /dev/null
+            az bicep lint --file "$template"
           done
 
   staging-infrastructure:

@@ -41,6 +41,12 @@ param postgresAdministratorPassword string
 @description('RabbitMQ application password. Supply through a GitHub Environment secret.')
 param rabbitMqPassword string
 
+@minValue(0)
+param rabbitMqMinReplicas int = 1
+@minValue(1)
+param rabbitMqMaxReplicas int = 1
+param rabbitMqScaleRules array = []
+
 var nameSuffix = '${workloadName}-${environment}-${regionCode}-${instance}'
 var environmentName = 'cae-${nameSuffix}'
 var workspaceName = 'log-${nameSuffix}'
@@ -115,6 +121,41 @@ module rabbitMq './modules/container-app.bicep' = {
     image: 'rabbitmq:3.13-management'
     containerPort: 5672
     ingressTransport: 'tcp'
+    minReplicas: rabbitMqMinReplicas
+    maxReplicas: rabbitMqMaxReplicas
+    scaleRules: rabbitMqScaleRules
+    probes: [
+      {
+        type: 'Startup'
+        tcpSocket: {
+          port: 5672
+        }
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 30
+      }
+      {
+        type: 'Liveness'
+        tcpSocket: {
+          port: 5672
+        }
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      }
+      {
+        type: 'Readiness'
+        tcpSocket: {
+          port: 5672
+        }
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      }
+    ]
     environmentVariables: [
       {
         name: 'RABBITMQ_DEFAULT_USER'

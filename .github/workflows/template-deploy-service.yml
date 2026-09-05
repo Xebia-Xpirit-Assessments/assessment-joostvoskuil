@@ -103,6 +103,27 @@ jobs:
           azd env set BASKET_API_EXISTS "$BASKET_API_EXISTS"
           azd env set CATALOG_API_EXISTS "$CATALOG_API_EXISTS"
           azd env set ORDERING_API_EXISTS "$ORDERING_API_EXISTS"
+          azd env set HEALTH_PROBE_PATH "${{ vars.HEALTH_PROBE_PATH || '/health' }}"
+          azd env set LIVENESS_PROBE_PATH "${{ vars.LIVENESS_PROBE_PATH || '/alive' }}"
+          azd env set HEALTH_PROBE_INITIAL_DELAY_SECONDS "${{ vars.HEALTH_PROBE_INITIAL_DELAY_SECONDS || '10' }}"
+          azd env set HEALTH_PROBE_PERIOD_SECONDS "${{ vars.HEALTH_PROBE_PERIOD_SECONDS || '10' }}"
+          azd env set HEALTH_PROBE_TIMEOUT_SECONDS "${{ vars.HEALTH_PROBE_TIMEOUT_SECONDS || '5' }}"
+          azd env set HEALTH_PROBE_FAILURE_THRESHOLD "${{ vars.HEALTH_PROBE_FAILURE_THRESHOLD || '3' }}"
+          azd env set WEBAPP_MIN_REPLICAS "${{ vars.WEBAPP_MIN_REPLICAS || '1' }}"
+          azd env set WEBAPP_MAX_REPLICAS "${{ vars.WEBAPP_MAX_REPLICAS || '1' }}"
+          azd env set WEBAPP_SCALE_RULES '${{ vars.WEBAPP_SCALE_RULES || '[]' }}'
+          azd env set IDENTITY_API_MIN_REPLICAS "${{ vars.IDENTITY_API_MIN_REPLICAS || '1' }}"
+          azd env set IDENTITY_API_MAX_REPLICAS "${{ vars.IDENTITY_API_MAX_REPLICAS || '1' }}"
+          azd env set IDENTITY_API_SCALE_RULES '${{ vars.IDENTITY_API_SCALE_RULES || '[]' }}'
+          azd env set BASKET_API_MIN_REPLICAS "${{ vars.BASKET_API_MIN_REPLICAS || '1' }}"
+          azd env set BASKET_API_MAX_REPLICAS "${{ vars.BASKET_API_MAX_REPLICAS || '1' }}"
+          azd env set BASKET_API_SCALE_RULES '${{ vars.BASKET_API_SCALE_RULES || '[]' }}'
+          azd env set CATALOG_API_MIN_REPLICAS "${{ vars.CATALOG_API_MIN_REPLICAS || '1' }}"
+          azd env set CATALOG_API_MAX_REPLICAS "${{ vars.CATALOG_API_MAX_REPLICAS || '1' }}"
+          azd env set CATALOG_API_SCALE_RULES '${{ vars.CATALOG_API_SCALE_RULES || '[]' }}'
+          azd env set ORDERING_API_MIN_REPLICAS "${{ vars.ORDERING_API_MIN_REPLICAS || '1' }}"
+          azd env set ORDERING_API_MAX_REPLICAS "${{ vars.ORDERING_API_MAX_REPLICAS || '1' }}"
+          azd env set ORDERING_API_SCALE_RULES '${{ vars.ORDERING_API_SCALE_RULES || '[]' }}'
           # Ephemeral, never-committed azd environment; plain env values are fine, nothing persists past this job.
           azd env set POSTGRES_ADMINISTRATOR_PASSWORD "${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}"
           azd env set RABBITMQ_PASSWORD "${{ secrets.RABBITMQ_PASSWORD }}"
@@ -153,7 +174,7 @@ jobs:
           docker push "$image"
           az containerapp update --name "$app_name" --resource-group "${{ inputs.resource-group }}" --image "$image" --output none
 
-      - name: Verify latest revision
+      - name: Run health and revision smoke checks
         shell: bash
         run: |
           case "${{ inputs.service }}" in
@@ -168,3 +189,11 @@ jobs:
           [[ "$provisioning" == "Succeeded" ]] || { echo "Container App provisioning state: $provisioning" >&2; exit 1; }
           az containerapp revision list --name "$app_name" --resource-group "${{ inputs.resource-group }}" \
             --query "[?properties.active].{name:name,state:properties.runningState,image:properties.template.containers[0].image}" -o table
+          probes=$(az containerapp show --name "$app_name" --resource-group "${{ inputs.resource-group }}" \
+            --query "properties.template.containers[0].probes" -o json)
+          jq -e '[.[].type] | sort == ["Liveness", "Readiness", "Startup"]' <<< "$probes" > /dev/null
+          if [[ "${{ inputs.service }}" == 'webapp' || "${{ inputs.service }}" == 'identity-api' ]]; then
+            fqdn=$(az containerapp show --name "$app_name" --resource-group "${{ inputs.resource-group }}" \
+              --query "properties.configuration.ingress.fqdn" -o tsv)
+            curl --fail --retry 12 --retry-delay 5 "https://$fqdn/health" > /dev/null
+          fi
