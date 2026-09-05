@@ -1,0 +1,57 @@
+name: eshop
+metadata:
+  template: eshop-azd@0.1.0
+
+# Shared infrastructure (resource group, ACR, Container Apps environment, PostgreSQL, Redis,
+# RabbitMQ) is provisioned separately via infra/main.bicep, not by azd.
+# azd only owns the 5 application Container Apps declared in infra/azd/main.bicep.
+infra:
+  path: infra/azd
+  module: main
+
+services:
+  webapp:
+    project: src/WebApp
+    host: containerapp
+    language: dotnet
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
+  identity-api:
+    project: src/Identity.API
+    host: containerapp
+    language: dotnet
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
+  basket-api:
+    project: src/Basket.API
+    host: containerapp
+    language: dotnet
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
+  catalog-api:
+    project: src/Catalog.API
+    host: containerapp
+    language: dotnet
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}
+  ordering-api:
+    project: src/Ordering.API
+    host: containerapp
+    language: dotnet
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: ${CONTAINER_REGISTRY_NAME}.azurecr.io
+      tag: ${IMAGE_TAG}

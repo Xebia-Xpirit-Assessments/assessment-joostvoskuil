@@ -5,69 +5,59 @@ param administratorLogin string
 param administratorPassword string
 param tags object = {}
 
-resource server 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
-  name: name
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
-  }
-  properties: {
+module server 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.10.0' = {
+  params: {
+    name: name
+    location: location
+    tags: tags
     administratorLogin: administratorLogin
     administratorLoginPassword: administratorPassword
+    autoGrow: 'Disabled'
+    backupRetentionDays: 7
+    databases: [
+      {
+        name: 'catalogdb'
+        charset: 'UTF8'
+        collation: 'en_US.utf8'
+      }
+      {
+        name: 'identitydb'
+        charset: 'UTF8'
+        collation: 'en_US.utf8'
+      }
+      {
+        name: 'orderingdb'
+        charset: 'UTF8'
+        collation: 'en_US.utf8'
+      }
+    ]
+    enableTelemetry: false
+    firewallRules: [
+      {
+        name: 'AllowAzureServices'
+        startIpAddress: '0.0.0.0'
+        endIpAddress: '0.0.0.0'
+      }
+    ]
+    geoRedundantBackup: 'Disabled'
+    highAvailability: 'Disabled'
+    publicNetworkAccess: 'Enabled'
+    skuName: 'Standard_B1ms'
+    storageSizeGB: 32
+    tier: 'Burstable'
     version: '16'
-    storage: {
-      storageSizeGB: 32
-      autoGrow: 'Disabled'
-    }
-    backup: {
-      backupRetentionDays: 7
-      geoRedundantBackup: 'Disabled'
-    }
-    highAvailability: {
-      mode: 'Disabled'
-    }
-    network: {
-      publicNetworkAccess: 'Enabled'
-    }
   }
 }
 
-resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = {
-  parent: server
-  name: 'AllowAzureServices'
+resource serverExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2022-12-01' = {
+  name: '${name}/azure.extensions'
   properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
+    source: 'user-override'
+    value: 'vector'
   }
+  dependsOn: [
+    server
+  ]
 }
 
-resource catalogDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
-  parent: server
-  name: 'catalogdb'
-  properties: {
-    charset: 'UTF8'
-    collation: 'en_US.utf8'
-  }
-}
-
-resource identityDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
-  parent: server
-  name: 'identitydb'
-  properties: {
-    charset: 'UTF8'
-    collation: 'en_US.utf8'
-  }
-}
-
-resource orderingDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
-  parent: server
-  name: 'orderingdb'
-  properties: {
-    charset: 'UTF8'
-    collation: 'en_US.utf8'
-  }
-}
-
-output fullyQualifiedDomainName string = server.properties.fullyQualifiedDomainName
+output fullyQualifiedDomainName string = server.outputs.fqdn

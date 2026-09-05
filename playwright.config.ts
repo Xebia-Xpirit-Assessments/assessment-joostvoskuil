@@ -3,6 +3,7 @@ require("dotenv").config({ path: "./.env" });
 import path from 'path';
 
 export const STORAGE_STATE = path.join(__dirname, 'playwright/.auth/user.json');
+const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -18,11 +19,14 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [
+    ['html'],
+    ['junit', { outputFile: 'test-results/e2e-junit.xml' }],
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5045',
+    baseURL: externalBaseUrl ?? 'http://localhost:5045',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -84,12 +88,14 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'dotnet run --project src/eShop.AppHost/eShop.AppHost.csproj',
-    url: 'http://localhost:5045',
-    reuseExistingServer: !process.env.CI,
-    stderr: 'pipe',
-    stdout: 'pipe',
-    timeout: process.env.CI ? (5 * 60_000) : 60_000,
-  },
+  ...(externalBaseUrl ? {} : {
+    webServer: {
+      command: 'dotnet run --project src/eShop.AppHost/eShop.AppHost.csproj',
+      url: 'http://localhost:5045',
+      reuseExistingServer: !process.env.CI,
+      stderr: 'pipe',
+      stdout: 'pipe',
+      timeout: process.env.CI ? (5 * 60_000) : 60_000,
+    },
+  }),
 });

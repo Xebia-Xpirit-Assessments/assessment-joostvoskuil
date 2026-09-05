@@ -2,20 +2,25 @@ param location string
 param name string
 param tags object = {}
 
-resource cache 'Microsoft.Cache/redis@2024-11-01' = {
-  name: name
-  location: location
-  tags: tags
-  properties: {
-    sku: {
-      name: 'Basic'
-      family: 'C'
-      capacity: 0
+module cache 'br/public:avm/res/cache/redis-enterprise:0.5.1' = {
+  params: {
+    name: name
+    location: location
+    tags: tags
+    database: {
+      accessKeysAuthentication: 'Enabled'
+      clientProtocol: 'Encrypted'
+      clusteringPolicy: 'NoCluster'
     }
-    enableNonSslPort: false
+    enableTelemetry: false
+    highAvailability: 'Disabled'
     minimumTlsVersion: '1.2'
     publicNetworkAccess: 'Enabled'
+    skuName: 'Balanced_B0'
   }
 }
 
-output hostName string = cache.properties.hostName
+output hostName string = cache.outputs.hostName
+
+@secure()
+output primaryStackExchangeRedisConnectionString string = cache.outputs.primaryStackExchangeRedisConnectionString!

@@ -1,252 +1,220 @@
-name: CI
+name: eShop - Pull request validation
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: eshop-pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    name: Detect affected components
+    runs-on: ubuntu-latest
+    outputs:
+      webapp: ${{ steps.filters.outputs.webapp }}
+      identity-api: ${{ steps.filters.outputs.identity-api }}
+      basket-api: ${{ steps.filters.outputs.basket-api }}
+      catalog-api: ${{ steps.filters.outputs.catalog-api }}
+      ordering-api: ${{ steps.filters.outputs.ordering-api }}
+      infrastructure: ${{ steps.filters.outputs.infrastructure }}
+    steps:
+      - name: Check out pull request commits
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Identify affected validation targets
+        id: filters
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          webapp=false
+          identity_api=false
+          basket_api=false
+          catalog_api=false
+          ordering_api=false
+          infrastructure=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              azure.yaml|infra/azd/*|Directory.Build.props|Directory.Build.targets|Directory.Packages.props|global.json|nuget.config|.dockerignore|src/eShop.ServiceDefaults/*|src/Shared/*|.github/actions/*|.github/workflows/*)
+                webapp=true
+                identity_api=true
+                basket_api=true
+                catalog_api=true
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/WebApp/*|src/WebAppComponents/*|tests/ClientApp.UnitTests/*)
+                webapp=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Identity.API/*)
+                identity_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Basket.API/*|tests/Basket.UnitTests/*)
+                basket_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Catalog.API/*|tests/Catalog.FunctionalTests/*)
+                catalog_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/Ordering.API/*|src/Ordering.Domain/*|src/Ordering.Infrastructure/*|tests/Ordering.UnitTests/*|tests/Ordering.FunctionalTests/*)
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/EventBus/*|src/EventBusRabbitMQ/*)
+                webapp=true
+                basket_api=true
+                catalog_api=true
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              src/IntegrationEventLogEF/*)
+                catalog_api=true
+                ordering_api=true
+                ;;
+            esac
+
+            case "$file" in
+              infra/main.bicep|infra/modules/*|infra/azd/main.bicep)
+                infrastructure=true
+                ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+
+          {
+            echo "webapp=$webapp"
+            echo "identity-api=$identity_api"
+            echo "basket-api=$basket_api"
+            echo "catalog-api=$catalog_api"
+            echo "ordering-api=$ordering_api"
+            echo "infrastructure=$infrastructure"
+          } >> "$GITHUB_OUTPUT"
+
+  webapp:
+    needs: changes
+    if: ${{ needs.changes.outputs.webapp == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: webapp
+      display-name: Web App
+
+  identity-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.identity-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: identity-api
+      display-name: Identity API
+
+  basket-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.basket-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: basket-api
+      display-name: Basket API
+
+  catalog-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.catalog-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: catalog-api
+      display-name: Catalog API
+
+  ordering-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.ordering-api == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: ordering-api
+      display-name: Ordering API
+
   infrastructure:
-    name: Validate Bicep and Docker contexts
+    name: Validate Bicep templates
+    needs: changes
+    if: ${{ needs.changes.outputs.infrastructure == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Validate Bicep
+      - name: Build Bicep templates
+        shell: bash
         run: |
-          az bicep build --file infra/bootstrap.bicep --stdout > /dev/null
-          az bicep build --file infra/main.bicep --stdout > /dev/null
-
-      - name: Validate Docker build contexts
-        run: |
-          test -f .dockerignore
-          for dockerfile in src/{WebApp,Identity.API,Basket.API,Catalog.API,Ordering.API}/Dockerfile; do
-            test -f "$dockerfile"
+          set -euo pipefail
+          for template in infra/main.bicep infra/azd/main.bicep; do
+            echo "Validating $template"
+            az bicep build --file "$template" --stdout > /dev/null
           done
 
-  build:
-    name: Build web solution
+  validation:
+    name: PR validation
+    needs: [changes, webapp, identity-api, basket-api, catalog-api, ordering-api, infrastructure]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore .NET Aspire workload
-        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
-
-      - name: Restore web solution
-        run: dotnet restore eShop.Web.slnf
-
-      - name: Build web solution
-        run: dotnet build eShop.Web.slnf --configuration Release --no-restore
-
-  unit-tests:
-    name: Unit tests (${{ matrix.name }})
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Basket
-            project: tests/Basket.UnitTests/Basket.UnitTests.csproj
-          - name: Ordering
-            project: tests/Ordering.UnitTests/Ordering.UnitTests.csproj
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Run unit tests
-        run: >-
-          dotnet test "${{ matrix.project }}"
-          --configuration Release
-          --collect:"XPlat Code Coverage"
-          --logger "trx;LogFileName=${{ matrix.name }}.trx"
-          --results-directory test-results
-
-      - name: Prepare Cobertura coverage report
-        if: ${{ !cancelled() }}
+      - name: Verify selected validations succeeded
         shell: bash
+        env:
+          VALIDATION_RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
           set -euo pipefail
-          mkdir -p coverage
-          coverage_file=$(find test-results -name coverage.cobertura.xml -print -quit || true)
-          if [[ -n "$coverage_file" ]]; then
-            cp "$coverage_file" "coverage/${{ matrix.name }}.cobertura.xml"
-          else
-            echo "No Cobertura coverage report was generated."
-          fi
-
-      - name: Upload unit-test results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unit-test-results-${{ matrix.name }}
-          path: test-results
-          if-no-files-found: ignore
-
-      - name: Publish unit-test report
-        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        with:
-          name: Unit tests (${{ matrix.name }})
-          path: test-results/*.trx
-          reporter: dotnet-trx
-          fail-on-empty: false
-          report-title: Unit tests (${{ matrix.name }})
-
-      - name: Upload coverage artifact
-        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: coverage-report-unit-${{ matrix.name }}
-          path: coverage/${{ matrix.name }}.cobertura.xml
-
-  upload-coverage-unit:
-    name: Upload unit-test coverage (${{ matrix.name }})
-    needs: unit-tests
-    if: ${{ !cancelled() && needs.unit-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      code-quality: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Basket
-          - name: Ordering
-    steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: coverage-report-unit-${{ matrix.name }}
-
-      - name: Upload unit-test coverage
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
-        with:
-          file: ${{ matrix.name }}.cobertura.xml
-          language: C#
-          label: code-coverage/unit-${{ matrix.name }}
-          # The report upload succeeds, but processing-status polling currently returns HTTP 403.
-          wait-for-processing-timeout: 0
-
-  functional-tests:
-    name: Functional tests (${{ matrix.name }})
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Catalog
-            project: tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj
-          - name: Ordering
-            project: tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore .NET Aspire workload
-        run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
-
-      - name: Run functional tests
-        run: >-
-          dotnet test "${{ matrix.project }}"
-          --configuration Release
-          --collect:"XPlat Code Coverage"
-          --logger "trx;LogFileName=${{ matrix.name }}.trx"
-          --results-directory test-results
-
-      - name: Prepare Cobertura coverage report
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p coverage
-          coverage_file=$(find test-results -name coverage.cobertura.xml -print -quit || true)
-          if [[ -n "$coverage_file" ]]; then
-            cp "$coverage_file" "coverage/${{ matrix.name }}.cobertura.xml"
-          else
-            echo "No Cobertura coverage report was generated."
-          fi
-
-      - name: Upload functional-test results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: functional-test-results-${{ matrix.name }}
-          path: test-results
-          if-no-files-found: ignore
-
-      - name: Publish functional-test report
-        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        with:
-          name: Functional tests (${{ matrix.name }})
-          path: test-results/*.trx
-          reporter: dotnet-trx
-          fail-on-empty: false
-          report-title: Functional tests (${{ matrix.name }})
-
-      - name: Upload coverage artifact
-        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: coverage-report-functional-${{ matrix.name }}
-          path: coverage/${{ matrix.name }}.cobertura.xml
-
-  upload-coverage-functional:
-    name: Upload functional-test coverage (${{ matrix.name }})
-    needs: functional-tests
-    if: ${{ !cancelled() && needs.functional-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      code-quality: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Catalog
-          - name: Ordering
-    steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: coverage-report-functional-${{ matrix.name }}
-
-      - name: Upload functional-test coverage
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
-        with:
-          file: ${{ matrix.name }}.cobertura.xml
-          language: C#
-          label: code-coverage/functional-${{ matrix.name }}
-          # The report upload succeeds, but processing-status polling currently returns HTTP 403.
-          wait-for-processing-timeout: 0
+          IFS=',' read -ra results <<< "$VALIDATION_RESULTS"
+          for result in "${results[@]}"; do
+            if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
+              echo "A selected validation finished with '$result'." >&2
+              exit 1
+            fi
+          done

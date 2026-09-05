@@ -1,0 +1,91 @@
+name: eShop - Deploy Ordering API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Ordering.API/**'
+      - 'src/Ordering.Domain/**'
+      - 'src/Ordering.Infrastructure/**'
+      - 'src/EventBus/**'
+      - 'src/EventBusRabbitMQ/**'
+      - 'src/IntegrationEventLogEF/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'azure.yaml'
+      - 'infra/azd/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+      - '.dockerignore'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      checks: write
+      code-quality: write
+      pull-requests: read
+    uses: ./.github/workflows/template-build-service.yml
+    with:
+      service: ordering-api
+      display-name: Ordering API
+
+  staging:
+    needs: build
+    if: ${{ github.event_name != 'pull_request' }}
+    concurrency:
+      group: eshop-deploy-ordering-api-staging
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/template-deploy-service.yml
+    with:
+      environment: staging
+      resource-group: rg-eshop-stg-swe-001
+      container-registry: acreshopstgswe001
+      location: swedencentral
+      region-code: swe
+      environment-code: stg
+      service: ordering-api
+      image-tag: ${{ github.sha }}
+    secrets: inherit
+
+  staging-e2e:
+    needs: staging
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      id-token: write
+      checks: write
+      pull-requests: read
+    uses: ./.github/workflows/template-run-e2e-tests.yml
+    secrets: inherit
+
+  production:
+    needs: staging-e2e
+    if: ${{ github.event_name != 'pull_request' && needs.staging-e2e.result == 'success' }}
+    concurrency:
+      group: eshop-deploy-ordering-api-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/template-deploy-service.yml
+    with:
+      environment: production
+      resource-group: rg-eshop-prd-swe-001
+      container-registry: acreshopprdswe001
+      location: swedencentral
+      region-code: swe
+      environment-code: prd
+      service: ordering-api
+      image-tag: ${{ github.sha }}
+    secrets: inherit

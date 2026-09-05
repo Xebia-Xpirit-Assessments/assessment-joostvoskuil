@@ -1,0 +1,170 @@
+name: _eShop - Template for deploying one service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      resource-group:
+        required: true
+        type: string
+      container-registry:
+        required: true
+        type: string
+      location:
+        required: true
+        type: string
+      region-code:
+        required: true
+        type: string
+      environment-code:
+        required: true
+        type: string
+      service:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: ${{ inputs.service }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: eshop-${{ inputs.environment }}-${{ inputs.service }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Azure Developer CLI
+        shell: bash
+        run: curl -fsSL https://aka.ms/install-azd.sh | bash
+
+      - name: Sign in to azd with OpenID Connect
+        shell: bash
+        run: |
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --federated-credential-provider github \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
+
+      - name: Detect which container apps already exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A apps=(
+            [WEBAPP_EXISTS]="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [IDENTITY_API_EXISTS]="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [BASKET_API_EXISTS]="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [CATALOG_API_EXISTS]="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+            [ORDERING_API_EXISTS]="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+          )
+          for key in "${!apps[@]}"; do
+            name="${apps[$key]}"
+            if az containerapp show --name "$name" --resource-group "${{ inputs.resource-group }}" >/dev/null 2>&1; then
+              echo "$key=true" >> "$GITHUB_ENV"
+            else
+              echo "$key=false" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Create ephemeral azd environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          azd env new "eshop-${{ inputs.environment-code }}" --no-prompt
+          azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          azd env set AZURE_LOCATION "${{ inputs.location }}"
+          azd env set AZURE_RESOURCE_GROUP "${{ inputs.resource-group }}"
+          azd env set CONTAINER_REGISTRY_NAME "${{ inputs.container-registry }}"
+          azd env set ENVIRONMENT_CODE "${{ inputs.environment-code }}"
+          azd env set REGION_CODE "${{ inputs.region-code }}"
+          azd env set IMAGE_TAG "${{ inputs.image-tag }}"
+          azd env set AZD_SERVICE_NAME "${{ inputs.service }}"
+          azd env set WEBAPP_EXISTS "$WEBAPP_EXISTS"
+          azd env set IDENTITY_API_EXISTS "$IDENTITY_API_EXISTS"
+          azd env set BASKET_API_EXISTS "$BASKET_API_EXISTS"
+          azd env set CATALOG_API_EXISTS "$CATALOG_API_EXISTS"
+          azd env set ORDERING_API_EXISTS "$ORDERING_API_EXISTS"
+          # Ephemeral, never-committed azd environment; plain env values are fine, nothing persists past this job.
+          azd env set POSTGRES_ADMINISTRATOR_PASSWORD "${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}"
+          azd env set RABBITMQ_PASSWORD "${{ secrets.RABBITMQ_PASSWORD }}"
+
+      - name: Provision container apps with azd
+        shell: bash
+        run: azd provision --no-prompt
+
+      - name: Build, push, and deploy selected application
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.service }}" in
+            webapp)
+              dockerfile='src/WebApp/Dockerfile'
+              repository='webapp'
+              app_name="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            identity-api)
+              dockerfile='src/Identity.API/Dockerfile'
+              repository='identity-api'
+              app_name="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            basket-api)
+              dockerfile='src/Basket.API/Dockerfile'
+              repository='basket-api'
+              app_name="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            catalog-api)
+              dockerfile='src/Catalog.API/Dockerfile'
+              repository='catalog-api'
+              app_name="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            ordering-api)
+              dockerfile='src/Ordering.API/Dockerfile'
+              repository='ordering-api'
+              app_name="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
+              ;;
+            *) echo "Unsupported service: ${{ inputs.service }}" >&2; exit 2 ;;
+          esac
+
+          registry_login_server=$(az acr show --name "${{ inputs.container-registry }}" --resource-group "${{ inputs.resource-group }}" --query loginServer -o tsv)
+          acr_access_token=$(az acr login --name "${{ inputs.container-registry }}" --expose-token --query accessToken -o tsv)
+          image="$registry_login_server/$repository:${{ inputs.image-tag }}"
+
+          printf '%s' "$acr_access_token" | docker login "$registry_login_server" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+          docker build --file "$dockerfile" --tag "$image" .
+          docker push "$image"
+          az containerapp update --name "$app_name" --resource-group "${{ inputs.resource-group }}" --image "$image" --output none
+
+      - name: Verify latest revision
+        shell: bash
+        run: |
+          case "${{ inputs.service }}" in
+            webapp) app_name="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
+            identity-api) app_name="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
+            basket-api) app_name="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
+            catalog-api) app_name="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
+            ordering-api) app_name="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
+            *) echo "Unsupported service" >&2; exit 2 ;;
+          esac
+          provisioning=$(az containerapp show --name "$app_name" --resource-group "${{ inputs.resource-group }}" --query "properties.provisioningState" -o tsv)
+          [[ "$provisioning" == "Succeeded" ]] || { echo "Container App provisioning state: $provisioning" >&2; exit 1; }
+          az containerapp revision list --name "$app_name" --resource-group "${{ inputs.resource-group }}" \
+            --query "[?properties.active].{name:name,state:properties.runningState,image:properties.template.containers[0].image}" -o table

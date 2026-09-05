@@ -38,12 +38,15 @@
       "extensions": [
         "GitHub.copilot",
         "GitHub.copilot-chat",
+        "shd101wyy.markdown-preview-enhanced",
         "ms-dotnettools.csdevkit",
         "ms-dotnettools.csharp",
-        "ms-azuretools.vscode-docker"
+        "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-bicep"
       ],
       "settings": {
-        "dotnet.defaultSolution": "eShop.Web.slnf"
+        "dotnet.defaultSolution": "eShop.Web.slnf",
+        "dotnet.projects.enableAutomaticRestore": false
       }
     }
   },

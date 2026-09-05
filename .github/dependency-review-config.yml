@@ -1,0 +1,21 @@
+# Commercial-use dependency policy.
+# Keep this list limited to licenses that permit commercial use without
+# requiring the application to be distributed under the same license.
+allow-licenses:
+  - 0BSD
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - CC0-1.0
+  - ISC
+  - MIT
+  - MIT-0
+  - MS-PL
+  - PostgreSQL
+  - Unlicense
+  - Zlib
+
+# License checks are enabled by default. Vulnerability checks remain enabled
+# as well; the workflow separately blocks moderate, high, and critical issues.
+license-check: true
+vulnerability-check: true

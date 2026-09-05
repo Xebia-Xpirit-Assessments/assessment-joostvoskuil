@@ -1,0 +1,57 @@
+name: Set up .NET and Node.js toolchain
+description: Sets up .NET 8, restores the .NET Aspire workload, and sets up Node.js with npm caching, as shared by multiple eShop workflows.
+
+inputs:
+  dotnet-version:
+    description: .NET SDK version to install.
+    required: false
+    default: 8.0.x
+  node-version:
+    description: Node.js version to install.
+    required: false
+    default: '20'
+  restore-web-solution:
+    description: Whether to run `dotnet restore eShop.Web.slnf`.
+    required: false
+    default: 'false'
+  restore-maui-workload:
+    description: Whether to restore the .NET MAUI workloads required to build the ClientApp/ClientApp.UnitTests projects.
+    required: false
+    default: 'false'
+  install-npm-dependencies:
+    description: Whether to run `npm ci`.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up .NET
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Restore .NET Aspire workload
+      shell: bash
+      run: dotnet workload restore src/eShop.AppHost/eShop.AppHost.csproj
+
+    - name: Restore .NET MAUI workloads
+      if: ${{ inputs.restore-maui-workload == 'true' }}
+      shell: bash
+      run: dotnet workload restore tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj
+
+    - name: Restore web solution
+      if: ${{ inputs.restore-web-solution == 'true' }}
+      shell: bash
+      run: dotnet restore eShop.Web.slnf
+
+    - name: Set up Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: Install JavaScript dependencies
+      if: ${{ inputs.install-npm-dependencies == 'true' }}
+      shell: bash
+      run: npm ci

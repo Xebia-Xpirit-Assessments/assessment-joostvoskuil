@@ -1,0 +1,65 @@
+name: _eShop - Template for deploying shared infrastructure
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      resource-group:
+        required: true
+        type: string
+      container-registry:
+        required: true
+        type: string
+      location:
+        required: true
+        type: string
+      region-code:
+        required: true
+        type: string
+      environment-code:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Shared infrastructure (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: eshop-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy shared infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment_principal_id=$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv)
+          test -n "$deployment_principal_id"
+          az deployment sub create \
+            --name "shared-${{ inputs.environment }}-${{ github.run_id }}" \
+            --location "${{ inputs.location }}" \
+            --template-file infra/main.bicep \
+            --parameters location="${{ inputs.location }}" resourceGroupName="${{ inputs.resource-group }}" \
+              environment="${{ inputs.environment-code }}" regionCode="${{ inputs.region-code }}" \
+              containerRegistryName="${{ inputs.container-registry }}" \
+              deploymentPrincipalId="$deployment_principal_id" \
+              postgresAdministratorPassword="${{ secrets.POSTGRES_ADMINISTRATOR_PASSWORD }}" \
+              rabbitMqPassword="${{ secrets.RABBITMQ_PASSWORD }}"
