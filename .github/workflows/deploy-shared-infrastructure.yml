@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - 'infra/main.bicep'
+      - 'infra/shared-registry.bicep'
       - 'infra/modules/**'
       - 'infra/azd/main.bicep'
   push:
     branches: [main]
     paths:
       - 'infra/main.bicep'
+      - 'infra/shared-registry.bicep'
       - 'infra/modules/**'
   workflow_dispatch:
   workflow_call:
@@ -35,13 +37,50 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for template in infra/main.bicep infra/azd/main.bicep; do
+          for template in infra/shared-registry.bicep infra/main.bicep infra/azd/main.bicep; do
             echo "Validating $template"
             az bicep build --file "$template" --stdout > /dev/null
           done
 
-  staging-infrastructure:
+  shared-infrastructure:
+    name: Deploy shared artifact registry
     needs: validate-bicep
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: shared
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: eshop-shared-artifact-registry
+      cancel-in-progress: false
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy shared resource group and registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          publisher_principal_id=$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv)
+          test -n "$publisher_principal_id"
+          az deployment sub create \
+            --name "shared-artifact-registry-${{ github.run_id }}" \
+            --location swedencentral \
+            --template-file infra/shared-registry.bicep \
+            --parameters location=swedencentral imagePublisherPrincipalId="$publisher_principal_id"
+
+  staging-infrastructure:
+    needs: [validate-bicep, shared-infrastructure]
     if: github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -50,7 +89,8 @@ jobs:
     with:
       environment: staging
       resource-group: rg-eshop-stg-swe-001
-      container-registry: acreshopstgswe001
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
       location: swedencentral
       region-code: swe
       environment-code: stg
@@ -66,7 +106,8 @@ jobs:
     with:
       environment: production
       resource-group: rg-eshop-prd-swe-001
-      container-registry: acreshopprdswe001
+      container-registry: acreshopsharedswe001
+      container-registry-resource-group: rg-eshop-shared-swe-001
       location: swedencentral
       region-code: swe
       environment-code: prd

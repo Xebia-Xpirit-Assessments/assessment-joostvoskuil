@@ -3,7 +3,6 @@
 
 ![eShop Logo](https://github.com/user-attachments/assets/52ef76f4-54c8-4bb8-8c50-f5383925fa1a)
 
-
 ## The Assignment
 eShop is looking for a partner who can help design and set up a GitHub Enterprise environment that lets them scale safely. As Xebia, we are asked to help design that setup and deliver a Proof of Concept: a single repository, configured the way every future eShop repository should be.
 

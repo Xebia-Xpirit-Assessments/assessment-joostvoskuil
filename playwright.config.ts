@@ -28,6 +28,12 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: externalBaseUrl ?? 'http://localhost:5045',
 
+    /* No browser window; required for CI runners and Cloud agent sessions without a display. */
+    headless: true,
+
+    /* Capture a screenshot after every test (pass or fail) so behavior can be attached as evidence. */
+    screenshot: 'on',
+
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
     ...devices['Desktop Chrome'],

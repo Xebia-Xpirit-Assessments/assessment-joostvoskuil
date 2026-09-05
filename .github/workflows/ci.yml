@@ -122,7 +122,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
@@ -135,7 +134,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
@@ -148,7 +146,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
@@ -161,7 +158,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:
@@ -174,7 +170,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      code-quality: write
       pull-requests: read
     uses: ./.github/workflows/template-build-service.yml
     with:

@@ -30,8 +30,11 @@ param serviceName string = 'all'
 @description('CAF instance number.')
 param instance string = '001'
 
-@description('The environment-specific ACR name created by main.bicep.')
+@description('The shared ACR name created by shared-registry.bicep.')
 param containerRegistryName string
+
+@description('The resource group that owns the shared ACR.')
+param containerRegistryResourceGroupName string
 
 @description('PostgreSQL administrator login.')
 param postgresAdministratorLogin string = 'eshopadmin'
@@ -83,10 +86,6 @@ resource redis 'Microsoft.Cache/redisEnterprise@2025-04-01' existing = {
   name: redisName
 }
 
-resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
-  name: containerRegistryName
-}
-
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' existing = {
   name: environmentName
 }
@@ -117,6 +116,24 @@ module identityImage './fetch-container-image.bicep' = if (serviceName == 'all' 
   }
 }
 
+module identityIdentity '../modules/container-app-identity.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
+  name: 'identity-api-identity'
+  params: {
+    location: location
+    name: identityName
+    tags: tags
+  }
+}
+
+module identityAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
+  name: 'identity-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: identityIdentity!.outputs.principalId
+  }
+}
+
 module identity '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'identity-api') {
   name: 'identity'
   params: {
@@ -124,6 +141,7 @@ module identity '../modules/container-app.bicep' = if (serviceName == 'all' || s
     name: identityName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
+    identityId: identityIdentity!.outputs.id
     image: identityImage.?outputs.containers[?0].?image ?? placeholderImage
     externalIngress: true
     environmentVariables: [
@@ -144,6 +162,9 @@ module identity '../modules/container-app.bicep' = if (serviceName == 'all' || s
     ]
     tags: union(tags, { 'azd-service-name': 'identity-api' })
   }
+  dependsOn: [
+    identityAcrPull
+  ]
 }
 
 module basketImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
@@ -154,6 +175,24 @@ module basketImage './fetch-container-image.bicep' = if (serviceName == 'all' ||
   }
 }
 
+module basketIdentity '../modules/container-app-identity.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
+  name: 'basket-identity'
+  params: {
+    location: location
+    name: basketName
+    tags: tags
+  }
+}
+
+module basketAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
+  name: 'basket-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: basketIdentity!.outputs.principalId
+  }
+}
+
 module basket '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'basket-api') {
   name: 'basket'
   params: {
@@ -161,6 +200,7 @@ module basket '../modules/container-app.bicep' = if (serviceName == 'all' || ser
     name: basketName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
+    identityId: basketIdentity!.outputs.id
     image: basketImage.?outputs.containers[?0].?image ?? placeholderImage
     ingressTransport: 'http2'
     environmentVariables: [
@@ -189,6 +229,9 @@ module basket '../modules/container-app.bicep' = if (serviceName == 'all' || ser
     ]
     tags: union(tags, { 'azd-service-name': 'basket-api' })
   }
+  dependsOn: [
+    basketAcrPull
+  ]
 }
 
 module catalogImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
@@ -199,6 +242,24 @@ module catalogImage './fetch-container-image.bicep' = if (serviceName == 'all' |
   }
 }
 
+module catalogIdentity '../modules/container-app-identity.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
+  name: 'catalog-identity'
+  params: {
+    location: location
+    name: catalogName
+    tags: tags
+  }
+}
+
+module catalogAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
+  name: 'catalog-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: catalogIdentity!.outputs.principalId
+  }
+}
+
 module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'catalog-api') {
   name: 'catalog'
   params: {
@@ -206,6 +267,7 @@ module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || se
     name: catalogName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
+    identityId: catalogIdentity!.outputs.id
     image: catalogImage.?outputs.containers[?0].?image ?? placeholderImage
     environmentVariables: [
       {
@@ -229,6 +291,9 @@ module catalog '../modules/container-app.bicep' = if (serviceName == 'all' || se
     ]
     tags: union(tags, { 'azd-service-name': 'catalog-api' })
   }
+  dependsOn: [
+    catalogAcrPull
+  ]
 }
 
 module orderingImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
@@ -239,6 +304,24 @@ module orderingImage './fetch-container-image.bicep' = if (serviceName == 'all' 
   }
 }
 
+module orderingIdentity '../modules/container-app-identity.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
+  name: 'ordering-identity'
+  params: {
+    location: location
+    name: orderingName
+    tags: tags
+  }
+}
+
+module orderingAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
+  name: 'ordering-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: orderingIdentity!.outputs.principalId
+  }
+}
+
 module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'ordering-api') {
   name: 'ordering'
   params: {
@@ -246,6 +329,7 @@ module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || s
     name: orderingName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
+    identityId: orderingIdentity!.outputs.id
     image: orderingImage.?outputs.containers[?0].?image ?? placeholderImage
     environmentVariables: [
       {
@@ -273,6 +357,9 @@ module ordering '../modules/container-app.bicep' = if (serviceName == 'all' || s
     ]
     tags: union(tags, { 'azd-service-name': 'ordering-api' })
   }
+  dependsOn: [
+    orderingAcrPull
+  ]
 }
 
 module webImage './fetch-container-image.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
@@ -283,6 +370,24 @@ module webImage './fetch-container-image.bicep' = if (serviceName == 'all' || se
   }
 }
 
+module webIdentity '../modules/container-app-identity.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
+  name: 'web-identity'
+  params: {
+    location: location
+    name: webName
+    tags: tags
+  }
+}
+
+module webAcrPull '../modules/acr-pull-assignment.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
+  name: 'web-acr-pull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: webIdentity!.outputs.principalId
+  }
+}
+
 module web '../modules/container-app.bicep' = if (serviceName == 'all' || serviceName == 'webapp') {
   name: 'web'
   params: {
@@ -290,6 +395,7 @@ module web '../modules/container-app.bicep' = if (serviceName == 'all' || servic
     name: webName
     managedEnvironmentId: containerAppsEnvironment.id
     containerRegistryName: containerRegistryName
+    identityId: webIdentity!.outputs.id
     image: webImage.?outputs.containers[?0].?image ?? placeholderImage
     externalIngress: true
     environmentVariables: [
@@ -326,6 +432,9 @@ module web '../modules/container-app.bicep' = if (serviceName == 'all' || servic
     ]
     tags: union(tags, { 'azd-service-name': 'webapp' })
   }
+  dependsOn: [
+    webAcrPull
+  ]
 }
 
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = '${containerRegistryName}.azurecr.io'

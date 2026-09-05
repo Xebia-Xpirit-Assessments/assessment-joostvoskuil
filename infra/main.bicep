@@ -22,13 +22,11 @@ param regionCode string = 'swe'
 @description('CAF instance number.')
 param instance string = '001'
 
-@description('CAF-compliant Azure Container Registry name. ACR names are globally unique and alphanumeric only.')
-@minLength(5)
-@maxLength(50)
+@description('CAF-compliant shared Azure Container Registry name. ACR names are globally unique and alphanumeric only.')
 param containerRegistryName string
 
-@description('Object ID of the GitHub Actions deployment service principal that publishes images to ACR.')
-param deploymentPrincipalId string
+@description('Resource group that owns the shared Azure Container Registry.')
+param containerRegistryResourceGroupName string
 
 @description('PostgreSQL administrator login.')
 param postgresAdministratorLogin string = 'eshopadmin'
@@ -58,17 +56,6 @@ resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
   location: location
   tags: tags
-}
-
-module registry './modules/acr.bicep' = {
-  name: 'containerRegistry'
-  scope: resourceGroup(rg.name)
-  params: {
-    location: location
-    name: containerRegistryName
-    deploymentPrincipalId: deploymentPrincipalId
-    tags: tags
-  }
 }
 
 module containerAppsEnvironment './modules/container-app-environment.bicep' = {
@@ -104,6 +91,25 @@ module redis './modules/redis.bicep' = {
   }
 }
 
+module rabbitMqIdentity './modules/container-app-identity.bicep' = {
+  name: 'rabbitMqIdentity'
+  scope: resourceGroup(rg.name)
+  params: {
+    location: location
+    name: rabbitMqName
+    tags: tags
+  }
+}
+
+module rabbitMqAcrPull './modules/acr-pull-assignment.bicep' = {
+  name: 'rabbitmqAcrPull'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: rabbitMqIdentity.outputs.principalId
+  }
+}
+
 module rabbitMq './modules/container-app.bicep' = {
   name: 'rabbitMq'
   scope: resourceGroup(rg.name)
@@ -112,6 +118,7 @@ module rabbitMq './modules/container-app.bicep' = {
     name: rabbitMqName
     managedEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: containerRegistryName
+    identityId: rabbitMqIdentity.outputs.id
     image: 'rabbitmq:3.13-management'
     containerPort: 5672
     ingressTransport: 'tcp'
@@ -133,8 +140,11 @@ module rabbitMq './modules/container-app.bicep' = {
     ]
     tags: tags
   }
+  dependsOn: [
+    rabbitMqAcrPull
+  ]
 }
+
 output resourceGroupName string = rg.name
 output containerAppsEnvironmentName string = environmentName
-output containerRegistryName string = registry.outputs.name
-output containerRegistryLoginServer string = registry.outputs.loginServer
+output containerRegistryName string = containerRegistryName

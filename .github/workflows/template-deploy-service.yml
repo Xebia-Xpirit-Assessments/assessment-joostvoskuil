@@ -12,6 +12,9 @@ on:
       container-registry:
         required: true
         type: string
+      container-registry-resource-group:
+        required: true
+        type: string
       location:
         required: true
         type: string
@@ -24,7 +27,8 @@ on:
       service:
         required: true
         type: string
-      image-tag:
+      image-reference:
+        description: 'Fully-qualified immutable shared-ACR image reference to deploy.'
         required: true
         type: string
 
@@ -65,7 +69,7 @@ jobs:
             --federated-credential-provider github \
             --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
 
-      - name: Detect which container apps already exist
+      - name: Detect container apps and resolve selected app
         shell: bash
         run: |
           set -euo pipefail
@@ -78,25 +82,44 @@ jobs:
           )
           for key in "${!apps[@]}"; do
             name="${apps[$key]}"
-            if az containerapp show --name "$name" --resource-group "${{ inputs.resource-group }}" >/dev/null 2>&1; then
+            provisioning_state=$(az containerapp show \
+              --name "$name" \
+              --resource-group "${{ inputs.resource-group }}" \
+              --query properties.provisioningState \
+              --output tsv 2>/dev/null || true)
+            if [[ "$provisioning_state" == "Succeeded" ]]; then
               echo "$key=true" >> "$GITHUB_ENV"
             else
               echo "$key=false" >> "$GITHUB_ENV"
+              if [[ -n "$provisioning_state" ]]; then
+                echo "$name is in provisioning state '$provisioning_state'; azd will reconcile it without reading its failed resource body." >&2
+              fi
             fi
           done
+
+          case "${{ inputs.service }}" in
+            webapp) app_name="${apps[WEBAPP_EXISTS]}" ;;
+            identity-api) app_name="${apps[IDENTITY_API_EXISTS]}" ;;
+            basket-api) app_name="${apps[BASKET_API_EXISTS]}" ;;
+            catalog-api) app_name="${apps[CATALOG_API_EXISTS]}" ;;
+            ordering-api) app_name="${apps[ORDERING_API_EXISTS]}" ;;
+            *) echo "Unsupported service: ${{ inputs.service }}" >&2; exit 2 ;;
+          esac
+          echo "APP_NAME=$app_name" >> "$GITHUB_ENV"
 
       - name: Create ephemeral azd environment
         shell: bash
         run: |
           set -euo pipefail
-          azd env new "eshop-${{ inputs.environment-code }}" --no-prompt
+          # Unique per service so concurrent staging/production deploys don't share one ARM deployment name.
+          azd env new "eshop-${{ inputs.environment-code }}-${{ inputs.service }}" --no-prompt
           azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           azd env set AZURE_LOCATION "${{ inputs.location }}"
           azd env set AZURE_RESOURCE_GROUP "${{ inputs.resource-group }}"
           azd env set CONTAINER_REGISTRY_NAME "${{ inputs.container-registry }}"
+          azd env set CONTAINER_REGISTRY_RESOURCE_GROUP "${{ inputs.container-registry-resource-group }}"
           azd env set ENVIRONMENT_CODE "${{ inputs.environment-code }}"
           azd env set REGION_CODE "${{ inputs.region-code }}"
-          azd env set IMAGE_TAG "${{ inputs.image-tag }}"
           azd env set AZD_SERVICE_NAME "${{ inputs.service }}"
           azd env set WEBAPP_EXISTS "$WEBAPP_EXISTS"
           azd env set IDENTITY_API_EXISTS "$IDENTITY_API_EXISTS"
@@ -111,60 +134,39 @@ jobs:
         shell: bash
         run: azd provision --no-prompt
 
-      - name: Build, push, and deploy selected application
+      - name: Validate immutable shared image and sign in to registry
         shell: bash
         run: |
           set -euo pipefail
-          case "${{ inputs.service }}" in
-            webapp)
-              dockerfile='src/WebApp/Dockerfile'
-              repository='webapp'
-              app_name="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
-              ;;
-            identity-api)
-              dockerfile='src/Identity.API/Dockerfile'
-              repository='identity-api'
-              app_name="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
-              ;;
-            basket-api)
-              dockerfile='src/Basket.API/Dockerfile'
-              repository='basket-api'
-              app_name="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
-              ;;
-            catalog-api)
-              dockerfile='src/Catalog.API/Dockerfile'
-              repository='catalog-api'
-              app_name="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
-              ;;
-            ordering-api)
-              dockerfile='src/Ordering.API/Dockerfile'
-              repository='ordering-api'
-              app_name="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001"
-              ;;
-            *) echo "Unsupported service: ${{ inputs.service }}" >&2; exit 2 ;;
-          esac
+          registry_login_server=$(az acr show --name "${{ inputs.container-registry }}" --resource-group "${{ inputs.container-registry-resource-group }}" --query loginServer -o tsv)
+          image="${{ inputs.image-reference }}"
+          digest="${image##*@}"
+          image_registry="${image%%/*}"
+          [[ "$image_registry" == "$registry_login_server" ]] || { echo "Image must be hosted in the shared registry." >&2; exit 1; }
+          [[ "$digest" == sha256:* ]] || { echo "Image must be identified by a SHA-256 digest." >&2; exit 1; }
+          # gh attestation verify pulls the image manifest for an oci:// subject, so it needs registry auth too.
+          az acr login --name "${{ inputs.container-registry }}" --expose-token --query accessToken -o tsv | \
+            docker login "$registry_login_server" --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
-          registry_login_server=$(az acr show --name "${{ inputs.container-registry }}" --resource-group "${{ inputs.resource-group }}" --query loginServer -o tsv)
-          acr_access_token=$(az acr login --name "${{ inputs.container-registry }}" --expose-token --query accessToken -o tsv)
-          image="$registry_login_server/$repository:${{ inputs.image-tag }}"
+      - name: Verify build provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh attestation verify "oci://${{ inputs.image-reference }}"
+          --repo "$GITHUB_REPOSITORY"
+          --signer-workflow "${GITHUB_SERVER_URL#*://}/$GITHUB_REPOSITORY/.github/workflows/template-publish-service.yml"
+          --cert-oidc-issuer "https://token.actions.githubusercontent.com"
+          --source-digest "$GITHUB_SHA"
 
-          printf '%s' "$acr_access_token" | docker login "$registry_login_server" --username 00000000-0000-0000-0000-000000000000 --password-stdin
-          docker build --file "$dockerfile" --tag "$image" .
-          docker push "$image"
-          az containerapp update --name "$app_name" --resource-group "${{ inputs.resource-group }}" --image "$image" --output none
+      - name: Deploy selected application image
+        shell: bash
+        run: az containerapp update --name "$APP_NAME" --resource-group "${{ inputs.resource-group }}" --image "${{ inputs.image-reference }}" --output none
 
       - name: Verify latest revision
         shell: bash
         run: |
-          case "${{ inputs.service }}" in
-            webapp) app_name="ca-eshop-web-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
-            identity-api) app_name="ca-eshop-identity-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
-            basket-api) app_name="ca-eshop-basket-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
-            catalog-api) app_name="ca-eshop-catalog-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
-            ordering-api) app_name="ca-eshop-ordering-${{ inputs.environment-code }}-${{ inputs.region-code }}-001" ;;
-            *) echo "Unsupported service" >&2; exit 2 ;;
-          esac
-          provisioning=$(az containerapp show --name "$app_name" --resource-group "${{ inputs.resource-group }}" --query "properties.provisioningState" -o tsv)
+          provisioning=$(az containerapp show --name "$APP_NAME" --resource-group "${{ inputs.resource-group }}" --query "properties.provisioningState" -o tsv)
           [[ "$provisioning" == "Succeeded" ]] || { echo "Container App provisioning state: $provisioning" >&2; exit 1; }
-          az containerapp revision list --name "$app_name" --resource-group "${{ inputs.resource-group }}" \
+          az containerapp revision list --name "$APP_NAME" --resource-group "${{ inputs.resource-group }}" \
             --query "[?properties.active].{name:name,state:properties.runningState,image:properties.template.containers[0].image}" -o table
