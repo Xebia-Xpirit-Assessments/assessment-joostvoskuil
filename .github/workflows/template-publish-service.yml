@@ -78,6 +78,7 @@ jobs:
             echo "reference=$registry_login_server/$repository@$digest"
           } >> "$GITHUB_OUTPUT"
 
+      # Records what the image contains (SPDX components), independent of how it was built.
       - name: Generate SPDX SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
@@ -86,7 +87,8 @@ jobs:
           output-file: sbom.spdx.json
           upload-artifact: false
 
-      - name: Generate build provenance attestation
+      # Proves who/what built this exact digest: signs the source repo, commit, and this workflow as the builder (SLSA provenance).
+      - name: Attest build provenance (proves how and where the image was built)
         id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -94,7 +96,8 @@ jobs:
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
 
-      - name: Generate SBOM attestation
+      # Proves what the image contains: signs the SBOM generated above so its contents can't be swapped after the fact.
+      - name: Attest software bill of materials (proves what the image contains)
         id: sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -103,7 +106,8 @@ jobs:
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
-      - name: Verify build provenance
+      # Only checks the build-provenance attestation (default predicate type); the SBOM attestation is a separate predicate and isn't re-verified here.
+      - name: Verify build provenance attestation
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

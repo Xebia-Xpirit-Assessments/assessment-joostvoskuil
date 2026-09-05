@@ -103,7 +103,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          azd env new "eshop-${{ inputs.environment-code }}" --no-prompt
+          # Unique per service so concurrent staging/production deploys don't share one ARM deployment name.
+          azd env new "eshop-${{ inputs.environment-code }}-${{ inputs.service }}" --no-prompt
           azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           azd env set AZURE_LOCATION "${{ inputs.location }}"
           azd env set AZURE_RESOURCE_GROUP "${{ inputs.resource-group }}"
