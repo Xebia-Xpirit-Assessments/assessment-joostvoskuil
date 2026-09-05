@@ -1,4 +1,4 @@
-name: _eShop - Service CI
+name: _eShop - Template for building one service
 
 on:
   workflow_call:
@@ -82,6 +82,8 @@ jobs:
 
       - name: Set up .NET and Node.js toolchain
         uses: ./.github/actions/setup-dotnet-node-toolchain
+        with:
+          restore-maui-workload: ${{ inputs.service == 'webapp' && 'true' || 'false' }}
 
       - name: Resolve unit test project
         id: project
@@ -137,7 +139,7 @@ jobs:
           report-title: Unit tests (${{ inputs.service }})
 
       - name: Upload coverage
-        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
           file: coverage/unit.cobertura.xml
@@ -213,7 +215,7 @@ jobs:
           report-title: Functional tests (${{ inputs.service }})
 
       - name: Upload coverage
-        if: ${{ !cancelled() && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && hashFiles('coverage/*.xml') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
           file: coverage/functional.cobertura.xml

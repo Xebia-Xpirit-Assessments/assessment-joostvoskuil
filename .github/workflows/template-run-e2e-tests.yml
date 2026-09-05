@@ -1,4 +1,4 @@
-name: _eShop - Staging E2E gate
+name: _eShop - Template for running Staging E2E gate
 
 on:
   workflow_call:
